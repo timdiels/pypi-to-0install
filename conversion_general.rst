@@ -6,6 +6,9 @@ I will use shorthands such as ``release_data['summary']`` throughout the text
 (instead of ``release_data(...)['summary']``) to refer to the PyPI XMLRPC
 interface.
 
+We will refer to a PyPI project as a package (e.g. numpy; this follows PyPI's
+terminology) and its downloads as distributions (e.g. an sdist/wheel of numpy).
+
 Overview
 --------
 This pseudo-feed gives an overview of the conversion (end tags omitted)::
@@ -36,6 +39,9 @@ Where::
     def canonical_name(pypi_name):
         re.sub(r"[-_.]+", "-", pypi_name).lower()
 
+Here, ``release_data`` refers to the release data of the newest release/version
+of the package.
+
 The description is converted from reST to plain text.
 
 Categories are `Trove classifiers`_.
@@ -44,7 +50,7 @@ Categories are `Trove classifiers`_.
 more info before I can convert Trove database into what's expected by ZI (or
 find something existing).
 
-For the meaning of `converted_version`, see the `Version conversion` section
+For the meaning of ``{converted_version}``, see the `Version conversion`_ section
 below.
 
 ``{stability}`` is ``developer`` if Python version has a ``.dev`` segment. Else, if
@@ -59,9 +65,9 @@ to derive it from ``release_data['license']``.  If none or its value is not
 understood, try to derive it from a ``LICENSE.txt``. If no such file, omit
 the license attribute.
 
-Dependencies are derived from the the distribution (egg_info: requires.txt) as
+Dependencies are derived from the the distribution (``egg_info``: ``requires.txt``) as
 this information is not available through PyPI's metadata (e.g.
-``release_data['requires'] is missing``).  ``{importance}`` is ``essential`` if
+``release_data['requires']`` is missing).  ``{importance}`` is ``essential`` if
 the dependency is in ``install_requires`` and ``recommended`` otherwise
 (``extras_require``).  ``{version}`` is the Python version ranges converted to
 ZI version ranges. One tricky part is `conditional dependencies`_, for now the
@@ -97,7 +103,6 @@ Where:
   - ``rc``, ``prerelease = rc{prerelease_number}``
 
 This conversion does not affect version ordering (**TODO** review this is true).
-
 
 .. _trove classifiers: http://www.catb.org/~esr/trove/
 .. _python versioning: http://0install.net/interface-spec.html#versions
