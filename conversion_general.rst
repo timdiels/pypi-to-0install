@@ -31,7 +31,7 @@ This pseudo-feed gives an overview of the conversion (end tags omitted)::
         license={license}
         ...
       >
-        <requires interface='https://pypi_to_zi_feeds.github.io/...' version='{version}' importance='{importance}' />
+        <requires interface='https://pypi_to_zi_feeds.github.io/...' importance='{importance}' />
         ...
 
 Where::
@@ -65,13 +65,7 @@ to derive it from ``release_data['license']``.  If none or its value is not
 understood, try to derive it from a ``LICENSE.txt``. If no such file, omit
 the license attribute.
 
-Dependencies are derived from the the distribution (``egg_info``: ``requires.txt``) as
-this information is not available through PyPI's metadata (e.g.
-``release_data['requires']`` is missing).  ``{importance}`` is ``essential`` if
-the dependency is in ``install_requires`` and ``recommended`` otherwise
-(``extras_require``).  ``{version}`` is the Python version ranges converted to
-ZI version ranges. One tricky part is `conditional dependencies`_, for now the
-conversion treats them as unconditional, though optional if in ``extras_require``.
+For ``<requires ...>...``, see `dependency conversion`_ below.
 
 Additional attributes and content of each ``<implementation>`` depends on the
 `packagetype` of the corresponding `release_url`.
@@ -104,7 +98,47 @@ Where:
 
 This conversion does not affect version ordering (**TODO** review this is true).
 
+Dependency conversion
+---------------------
+Dependencies are derived from the the distribution (``egg_info``:
+``requires.txt`` and ``depends.txt``) as this information is not available
+through PyPI's metadata (e.g.  ``release_data['requires']`` is missing).
+``{importance}`` is ``essential`` if the dependency is in ``install_requires``
+and ``recommended`` otherwise (``extras_require``).
+
+Python packages allow for optional named groups of dependencies called extras.
+Further, Python dependencies can be `conditional <conditional dependencies_>`_
+(by using `environment markers`_). If a dependency is either conditional or
+appears in extras_require, it is added as a recommended dependencies in the
+converted feed, else it is added as a required dependency. Note that Zero
+Install tries to select all recommended dependencies, but does not fail to
+select the depending interface when one of its recommended dependencies cannot
+be selected.
+
+For example::
+
+  install_requires = ['dep1 ; python_version<2.7', 'dep2==3.*']
+  extras_require = {
+      ':python_version<2.7': ['install_requires_dep'],
+      'test:platform_system=="Windows"': ['pywin32'],  # only on windows
+      'test': ['somepkg'], # regardless of platform
+      'special_feature': ['dep2>=3.3,<4'], # regardless of platform
+  }
+
+is converted to::
+
+    <implementation ...>
+      <requires interface='.../feeds/dep1.xml' importance='recommended' />
+      <requires interface='.../feeds/dep2.xml' importance='required'>
+        <version not-before='3' before='4' />  <!-- dep2==3.* -->
+        <version not-before='3.3' before='4' />  <!-- dep2>=3.3,<4 -->
+      </requires>
+      <requires interface='.../feeds/install_requires_dep.xml' importance='recommended' />
+      <requires interface='.../feeds/pywin32.xml' importance='recommended' />
+      <requires interface='.../feeds/somepkg.xml' importance='recommended' />
+
 .. _trove classifiers: http://www.catb.org/~esr/trove/
 .. _python versioning: http://0install.net/interface-spec.html#versions
 .. _zi versioning: https://www.python.org/dev/peps/pep-0440/#version-scheme
 .. _conditional dependencies: https://hynek.me/articles/conditional-python-dependencies/
+.. _environment markers: https://www.python.org/dev/peps/pep-0508/
