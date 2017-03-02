@@ -16,3 +16,6 @@ venv
 last_test_runs
 target
 src/doc/sphinx/_build
+run
+test
+*.log
