@@ -23,7 +23,7 @@ This pseudo-feed gives an overview of the conversion (end tags omitted)::
       <needs-terminal/> iff ``Environment :: Console`` in classifiers
 
       <implementation 
-        id={release_urls['url']}
+        id={release_urls['path']}
         version={converted_version}
         released={format(release_urls['upload_time'], 'YYYY-MM-DD')}
         stability={stability}
