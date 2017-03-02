@@ -6,7 +6,7 @@ Wheels are currently ignored.
 Requirements:
 
 - Python 3
-- 
+- pip install -r requirements.txt  # in a venv
 
 For a weekly conversion, see pypi_to_0install.github.io TODO
 

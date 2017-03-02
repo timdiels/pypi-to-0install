@@ -1,0 +1,6 @@
+packaging
+lxml
+attrs
+pypandoc
+patool
+pkginfo
