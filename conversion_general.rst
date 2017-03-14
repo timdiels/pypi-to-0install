@@ -164,13 +164,13 @@ is converted to::
 
     <implementation ...>
       <requires interface='.../feeds/dep1.xml' importance='recommended' />
-      <requires interface='.../feeds/dep2.xml' importance='required'>
-        <version not-before='3' before='4' />  <!-- dep2==3.* -->
-        <version not-before='3.3' before='4' />  <!-- dep2>=3.3,<4 -->
-      </requires>
+      <requires interface='.../feeds/dep2.xml' importance='required' version='{constraints}' />
       <requires interface='.../feeds/install_requires_dep.xml' importance='recommended' />
       <requires interface='.../feeds/pywin32.xml' importance='recommended' />
       <requires interface='.../feeds/somepkg.xml' importance='recommended' />
+
+where ``{constraints}`` are all Python version specifiers converted to a ZI
+version expression.
 
 .. _trove classifiers: http://www.catb.org/~esr/trove/
 .. _python versioning: https://www.python.org/dev/peps/pep-0440/#version-scheme
