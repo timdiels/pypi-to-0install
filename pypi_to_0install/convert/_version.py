@@ -15,15 +15,32 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
+from zeroinstall.injector.versions import parse_version as zi_parse_version
 from packaging.version import parse as py_parse_version, VERSION_PATTERN
+from functools import total_ordering
 import attr
 import re
 
-@attr.s(frozen=True)
+@total_ordering
+@attr.s(frozen=True, cmp=False)
 class Version(object):
-    epoch = attr.ib()  # int
-    release = attr.ib()  # str, e.g. 1.1
-    modifiers = attr.ib(convert=tuple)  # tuple(Modifier). Musn't contain Modifier(type_='')
+    epoch = attr.ib()  #: int
+    release = attr.ib()  #: str, e.g. 1.1
+    
+    #: tuple(Modifier). Musn't contain Modifier(type_='')
+    modifiers = attr.ib(convert=tuple)
+    
+    #: str or None; if Version was created by parsing, the raw string which got
+    #: parsed (such that parse_version(raw) == self), None otherwise (e.g.
+    #: after_version())
+    raw = attr.ib()
+    
+    #: allows for versions to come right after another such that no Python version can fit between them
+    _after = attr.ib(default=0)
+    
+    #: Note: MIN/MAX are set after class definition (these assignments help keep calm Pylint)
+    MIN = None  #: smallest possible version, just a regular version
+    MAX = None  #: largest possible version, a special version that only supports comparisons
     
     def format_zi(self):
         '''
@@ -33,16 +50,25 @@ class Version(object):
         -------
         str
         '''
+        # modifiers
         modifiers = list(self.modifiers)
         max_modifiers = 3  # ...pre.post.dev
         if len(modifiers) < max_modifiers:
             modifiers.append(Modifier('', None))
         modifiers = '-'.join(modifier.format_zi() for modifier in modifiers)
         
-        return '{epoch}-{release}-{modifiers}'.format(
+        # after
+        if self._after:
+            after = '-{}'.format(self._after)
+        else:
+            after = ''
+        
+        #
+        return '{epoch}-{release}-{modifiers}{after}'.format(
             epoch=self.epoch,
             release=self.release,
-            modifiers=modifiers
+            modifiers=modifiers,
+            after=after
         )
         
     def format_py(self):
@@ -53,6 +79,9 @@ class Version(object):
         -------
         str
         '''
+        if self.after:
+            raise Exception('Cannot format after-version as Python version')
+        
         if self.modifiers:
             modifiers = '.' + '.'.join(modifier.format_py() for modifier in self.modifiers)
         else:
@@ -73,7 +102,7 @@ class Version(object):
         last_modifier = self.modifiers[-1]
         last_modifier = attr.assoc(last_modifier, number=last_modifier.number + 1)
         modifiers = self.modifiers[:-1] + (last_modifier,)
-        return attr.assoc(self, modifiers=modifiers)
+        return attr.assoc(self, modifiers=modifiers, raw=None)
         
     def increment_release(self):
         '''
@@ -82,7 +111,7 @@ class Version(object):
         release = self.release.split('.')
         release[-1] = str(int(release[-1]) + 1)
         release = '.'.join(release)
-        return attr.assoc(self, release=release)
+        return attr.assoc(self, release=release, raw=None)
         
     @property
     def is_prerelease(self):
@@ -93,8 +122,30 @@ class Version(object):
         Append modifier
         '''
         modifiers = self.modifiers + (modifier,)
-        return attr.assoc(self, modifiers=modifiers)
+        return attr.assoc(self, modifiers=modifiers, raw=None)
+    
+    def after_version(self):
+        '''
+        Get a version such that version..!after_version contains only the given
+        version
+        '''
+        return attr.assoc(self, _after=self._after + 1, raw=None)
         
+    def __eq__(self, other):
+        if other == Version.MAX:
+            return False
+        else:
+            return (
+                (self.epoch, self.release, self.modifiers, self._after)
+                ==
+                (other.epoch, other.release, other.modifiers, other._after)
+            )
+        
+    def __lt__(self, other):
+        if other == Version.MAX:
+            return True
+        else:
+            return zi_parse_version(self.format_zi()) < zi_parse_version(other.format_zi())
         
 @attr.s(frozen=True)
 class Modifier(object):
@@ -129,6 +180,7 @@ class Modifier(object):
 class InvalidVersion(Exception):
     pass
         
+#TODO mv to tests, no longer used in 'real' code
 def convert_version(version):
     '''
     Get ZI version string given a Python version string
@@ -156,7 +208,7 @@ def parse_version(version, trim_zeros=True):
     InvalidVersion
         If is not a valid PEP440 public version
     '''
-    original_version = version
+    raw = version
     
     # Normalise the version; handles odd cases like 'alpha' instead of 'a'
     version = str(py_parse_version(version))
@@ -166,7 +218,7 @@ def parse_version(version, trim_zeros=True):
     if not match:
         raise InvalidVersion(
             'Got: {!r}. Should be valid (public) PEP440 version'
-            .format(original_version)
+            .format(raw)
         )
     parts = match.groups()
     epoch = int(parts[0] or 0)
@@ -178,8 +230,8 @@ def parse_version(version, trim_zeros=True):
     local = parts[13]
     if local is not None:
         raise InvalidVersion(
-            'Got local version: {!r}. Should be public'
-            .format(original_version)
+            'Got local version: {!r}. Should be public version'
+            .format(raw)
         )
     
     # Trim trailing zeros
@@ -198,22 +250,16 @@ def parse_version(version, trim_zeros=True):
     if dev_number is not None:
         modifiers.append(Modifier('dev', int(dev_number)))
     
-    return Version(epoch, release, modifiers)
+    return Version(epoch, release, modifiers, raw)
 
-#TODO rm if unused
-def after_version(version):
-    '''
-    Get a version such that version..!after_version contains only the given
-    version
-    
-    Parameters
-    ----------
-    version :: str
-        ZI version
-    
-    Returns
-    -------
-    str
-        ZI version, might not correspond to an actual Python version.
-    '''
-    return version + '-1'  # -0 would be sufficient, -1 shields us from the 0.001% chance that zero padding is added to ZI
+@total_ordering
+class MaxVersion(object):
+    def __lt__(self, other):
+        if other == Version.MAX:
+            return True
+        else:
+            return not (other < self)
+        
+Version.MIN = parse_version('0.dev')
+Version.MAX = MaxVersion()
+del MaxVersion

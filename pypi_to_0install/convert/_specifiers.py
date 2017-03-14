@@ -16,8 +16,8 @@
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
 import attr
-from ._version import convert_version, parse_version, after_version, Modifier, InvalidVersion
-from zeroinstall.injector.versions import parse_version as zi_parse_version, format_version as zi_format_version
+from ._version import parse_version, Modifier, InvalidVersion, Version
+from zeroinstall.injector.versions import parse_version as zi_parse_version
     
 def convert_specifiers(context, specifiers):
     '''
@@ -88,25 +88,29 @@ class _Or(AST):
     def format_zi(self):
         return ' | '.join(range_.format_zi() for range_ in self.ranges)
     
-@attr.s(frozen=True, repr=False, cmp=False)
+@attr.s(frozen=True, repr=False, str=False, cmp=False)
 class _Range(AST):
     
     '''
     version..!version | version.. | ..!version
     '''
     
-    def _zi_parse_version_if_any(version):  # @NoSelf
+    def _validate_start(self, attribute, start):
+        if start is None:
+            raise ValueError('start cannot be None')
+        if start == Version.MAX:
+            raise ValueError('Range cannot start at Version.MAX')
         
-        if isinstance(version, list):
-            # ZI internal version is a list, so we assume it's an already parsed version
-            return version
-        elif version:
-            return zi_parse_version(version)
-        else:
-            return None
-    
-    start = attr.ib(convert=_zi_parse_version_if_any)  # zi_version :: list or None. Start and end cannot both be None
-    end = attr.ib(convert=_zi_parse_version_if_any)  # zi_version :: list or None
+    def _validate_end(self, attribute, end):
+        if end is None:
+            raise ValueError('end cannot be None')
+        if end == Version.MIN:
+            raise ValueError('Range cannot end at Version.MAX')
+        if end <= self.start:
+            raise ValueError('Range cannot be empty')
+        
+    start = attr.ib(validator=_validate_start)  # :: Version
+    end = attr.ib(validator=_validate_end)  # :: Version
     
     def __and__(self, other):
         '''
@@ -116,43 +120,28 @@ class _Range(AST):
         -------
         _Range
         '''
-        if self.start is None or other.start is None:
-            start = self.start or other.start
-        else:
-            start = max(self.start, other.start)
-            
-        if self.end is None or other.end is None:
-            end = self.end or other.end
-        else:
-            end = min(self.end, other.end)
-            
+        start = max(self.start, other.start)
+        end = min(self.end, other.end)
         return _Range(start, end)
     
     def __lt__(self, other):
-        if self.start is None:
-            return True
-        elif other.start is None:
-            return False
-        else:
-            return self.start < other.start
+        return self.start < other.start
         
     def format_zi(self):
-        if self.start is None:
-            start = ''
+        # If range contains single version, return version, else return range
+        if self.end == self.start.after_version():
+            return self.start.format_zi()
         else:
-            start = zi_format_version(self.start)
-            
-        if self.end is None:
-            end = ''
-        else:
-            end = zi_format_version(self.end)
-            
-        # If single version, return single, else return range
-        if start and end == after_version(start):
-            return start
-        else:
-            if end:
-                end = '!' + end
+            if self.start == Version.MIN:
+                start = ''
+            else:
+                start = self.start.format_zi()
+                
+            if self.end == Version.MAX:
+                end = ''
+            else:
+                end = '!' + self.end.format_zi()
+                
             return '{}..{}'.format(start, end)
     
     def __repr__(self):
@@ -168,10 +157,10 @@ class _NotVersion(AST):
     !version
     '''
     
-    version = attr.ib()  # zi_version :: list
+    version = attr.ib()  # :: Version
     
     def format_zi(self):
-        return '!{}'.format(zi_format_version(self.version))
+        return '!{}'.format(self.version.format_zi())
     
 class _InvalidSpecifier(Exception):
     pass
@@ -192,30 +181,39 @@ def _specifiers_to_ast(context, specifiers):
         Root of the created abstract syntax tree or None if the specifiers did
         not actually constrain anything
     '''
-    expressions = []
+    and_expressions = []
     
     # Convert specifiers
     for operator, version in specifiers:
-        try:
-            try:
-                if version.endswith('.*') and operator not in ('==', '!='):
-                    raise _InvalidSpecifier('{} does not allow prefix match suffix (.*)'.format(operator))
-                expressions.append(_converters[operator](version))
-            except InvalidVersion as ex:
-                raise _InvalidSpecifier('Invalid version: {}'.format(ex.args[0]))
-        except _InvalidSpecifier as ex:
+        def _log_invalid_specifier(reason):
             context.feed_logger.warning(
                 "Ignoring invalid specifier: '{}{}'. {}"
-                .format(operator, version, ex.args[0])
+                .format(operator, version, reason)
             )
+            
+        try:
+            if version.endswith('.*'):
+                try:
+                    converter = _prefix_match_converters[operator]
+                except KeyError:
+                    _log_invalid_specifier('{} does not allow prefix match suffix (.*)'.format(operator))
+                    continue
+                expression = converter(parse_version(version[:-2]))  # Note: -2 removes the .* suffix
+            else:
+                expression = _converters[operator](parse_version(version))
+            and_expressions.append(expression)
+        except InvalidVersion as ex:
+            _log_invalid_specifier('Invalid version: {}'.format(ex.args[0]))
+        except _InvalidSpecifier as ex:
+            _log_invalid_specifier(ex.args[0])
     
     # Return
-    if not expressions:
-        return None
-    elif len(expressions) == 1:
-        return expressions[0]
+    if not and_expressions:
+        return None  # happens when all specifiers were ignored (due to invalid)
+    elif len(and_expressions) == 1:
+        return and_expressions[0]
     else:
-        return _And(expressions)
+        return _And(and_expressions)
 
 def _convert_ge(version):
     '''
@@ -226,47 +224,46 @@ def _convert_ge(version):
     version : str
         Python version string
     '''
-    return _Range(convert_version(version), None)  # v..
+    return _Range(version, Version.MAX)  # v..
 
 def _convert_le(version):
     '''
     Convert <=version to AST
     '''
-    return _Range(convert_version('0.dev'), after_version(convert_version(version)))  # 0.dev..v; 0.dev is the min of valid Python versions
+    return _Range(Version.MIN, version.after_version())  # ..v
 
 def _convert_gt(version):
     '''
     Convert >version to AST
     '''
     # Note: "The exclusive ordered comparison >V MUST NOT allow a post-release of the given version unless V itself is a post release."
-    version = parse_version(version)
     can_append_post = not version.modifiers or version.modifiers[-1].type_ not in ('post', 'dev')
     if can_append_post:
         # Increment to first version after version.post*
         if version.modifiers:
             version.increment_last_modifier()
         else:
-            version = attr.assoc(version, release=version.release + '.1')
+            version = attr.assoc(version, release=version.release + '.1', raw=None)
         
         # Append .dev0
         version = version.append_modifier(Modifier('dev', 0))
         
-        return _Range(version.format_zi(), None)  # (v+1).dev0..
+        return _Range(version, Version.MAX)  # (v+1).dev0..
     else:
-        return _Range(after_version(version.format_zi()), None)  # v+..
+        return _Range(version.after_version(), Version.MAX)  # v+..
 
 def _convert_lt(version):
     '''
     Convert <version to AST
     '''
     # Note: "The exclusive ordered comparison <V MUST NOT allow a pre-release of the specified version unless the specified version is itself a pre-release."
-    if not parse_version(version).is_prerelease:
+    if not version.is_prerelease:
         # Note: With v of the form epoch!release[.postN], v.dev0..!v are all
         # prereleases of v. Removing the prereleases from ..!v, yields
         # ..!v.dev0
-        return _Range(None, convert_version(version + '.dev'))  # ..!v.dev0
+        return _Range(Version.MIN, version.append_modifier(Modifier('dev', 0)))  # ..!v.dev0
     else:
-        return _Range(None, convert_version(version))  # ..!v
+        return _Range(Version.MIN, version)  # ..!v
 
 def _convert_arbitrary_eq(version):
     '''
@@ -274,7 +271,7 @@ def _convert_arbitrary_eq(version):
     '''
     # Note: we only support valid public PEP440 versions, by consequence === is
     # equivalent to == without prefix match
-    return _convert_eq(version, allow_prefix_match=False)
+    return _convert_eq(version)
 
 def _convert_compatible(version):
     '''
@@ -286,73 +283,70 @@ def _convert_compatible(version):
     and_expressions.append(_convert_ge(version))
     
     # Replace modifiers and last release component with .*
-    version = parse_version(version, trim_zeros=False)
+    version = parse_version(version.raw, trim_zeros=False)
     release = version.release.split('.')
     if len(release) < 2:
         raise _InvalidSpecifier('Compatible release clause requires multi-part release segment (e.g. ~=1.1)')
     release = '.'.join(release[:-1])
-    version = attr.assoc(version, release=release, modifiers=[])
-    and_expressions.append(_convert_eq(version.format_py() + '.*'))  # ==stripped.*
+    version = attr.assoc(version, release=release, modifiers=(), raw=None)
+    and_expressions.append(_convert_eq_prefix_match(version))  # ==stripped.*
     
     # Return
     return _And(and_expressions)
 
-def _convert_eq(version, allow_prefix_match=True):
+def _convert_eq(version):
     '''
-    Convert ==version[.*] to AST
+    Convert ==version to AST
     '''
-    print(version)
-    return _convert_eq_or_ne(version, allow_prefix_match, is_eq=True)
+    # v..!v+ = v
+    return _Range(version, version.after_version())
 
 def _convert_ne(version):
     '''
-    Convert !=version[.*] to AST
+    Convert !=version to AST
     '''
-    return _convert_eq_or_ne(version, allow_prefix_match=True, is_eq=False)
+    # ..!v | v+.. = !v
+    return _Or((
+        _Range(Version.MIN, version),
+        _Range(version.after_version(), Version.MAX)
+    ))
 
-def _convert_eq_or_ne(version, allow_prefix_match, is_eq):
-    is_prefix_match = version.endswith('.*')  # Note: prefix match is only allowed on == and !=
-    if not is_prefix_match:
-        version = convert_version(version)
-        after_version_ = after_version(version)
-        if is_eq:
-            # v..!v+ = v
-            return _Range(version, after_version_)
-        else:
-            # ..!v | v+.. = !v
-            return _Or((
-                _Range(None, version),
-                _Range(after_version_, None)
-            ))
+def _convert_eq_prefix_match(version):
+    '''
+    Convert ==version.* to AST
+    '''
+    return _convert_prefix_match(version, is_eq=True)
+    
+def _convert_ne_prefix_match(version):
+    '''
+    Convert !=version.* to AST
+    '''
+    return _convert_prefix_match(version, is_eq=False)
+
+def _convert_prefix_match(version, is_eq):
+    # Derive start of range covered by prefix.*
+    start = version.append_modifier(Modifier('dev', 0))
+    
+    # Derive end by incrementing by 1 the number of the last modifier if
+    # any, or the last component of the release segment otherwise
+    if version.modifiers:
+        if version.modifiers[-1].type_ == 'dev':
+            raise _InvalidSpecifier('Prefix match must not end with .dev.*')
+        end = version.increment_last_modifier()
     else:
-        version = version[:-2]  # remove .* suffix
-        version = parse_version(version)
+        end = version.increment_release()
+    end = end.append_modifier(Modifier('dev', 0))
         
-        # Derive start of range covered by prefix.*
-        start = version.append_modifier(Modifier('dev', 0))
-        start = start.format_zi()
-        
-        # Derive end by incrementing by 1 the number of the last modifier if
-        # any, or the last component of the release segment otherwise
-        if version.modifiers:
-            if version.modifiers[-1].type_ == 'dev':
-                raise _InvalidSpecifier('Prefix match must not end with .dev.*')
-            end = version.increment_last_modifier()
-        else:
-            end = version.increment_release()
-        end = end.append_modifier(Modifier('dev', 0))
-        end = end.format_zi()
-            
-        # Return AST
-        if is_eq:
-            # s..!e
-            return _Range(start, end)
-        else:
-            # ..!s | e..
-            return _Or((
-                _Range(None, start),
-                _Range(end, None)
-            ))
+    # Return AST
+    if is_eq:
+        # s..!e
+        return _Range(start, end)
+    else:
+        # ..!s | e..
+        return _Or((
+            _Range(Version.MIN, start),
+            _Range(end, Version.MAX)
+        ))
     
 _converters = {
     '>=': _convert_ge,
@@ -363,6 +357,11 @@ _converters = {
     '~=': _convert_compatible,
     '==': _convert_eq,
     '!=': _convert_ne,
+}
+
+_prefix_match_converters = {
+    '==': _convert_eq_prefix_match,
+    '!=': _convert_ne_prefix_match,
 }
     
 def _remove_and(ast):
@@ -412,16 +411,18 @@ def _simplify(ast):
     '''
     ranges = sorted(ast.ranges)
     ranges = _join_touching_or_overlapping(ranges)
+    
+    # If ranges includes all but one version, return !version
     if len(ranges) == 2:
         range1 = ranges[0]
         range2 = ranges[1]
-        if (range1.start is None
-            and range2.end is None
-            and range1.end is not None
-            and range2.start is not None
-            and after_version(zi_format_version(range1.end)) == zi_format_version(range2.start)
+        if (range1.start == Version.MIN
+            and range2.end == Version.MAX
+            and range1.end.after_version() == range2.start
         ):
             return _NotVersion(range1.end)
+        
+    #
     if len(ranges) == 1:
         return ranges[0]
     else:
@@ -444,17 +445,14 @@ def _join_touching_or_overlapping(ranges):
     range1 = ranges[0]
     for range2 in ranges[1:]:
         # If range is v.., stop as it includes all subsequent ranges
-        if range1.end is None:
+        if range1.end == Version.MAX:
             break
         
         # If touching/overlapping,
-        is_touching_or_overlapping = range2.start is None or range1.end >= range2.start
+        is_touching_or_overlapping = range1.end >= range2.start
         if is_touching_or_overlapping:
             # Join ranges
-            if range2.end is None:
-                end = None
-            else:
-                end = max(range1.end, range2.end)
+            end = max(range1.end, range2.end)
             range1 = attr.assoc(end=end)
         else:
             # Save range1 and continue with range2

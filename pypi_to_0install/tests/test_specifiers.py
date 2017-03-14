@@ -24,7 +24,7 @@ from packaging.specifiers import SpecifierSet
 from pkg_resources import Requirement
 from zeroinstall.injector.versions import parse_version_expression, parse_version as zi_parse_version 
 from pypi_to_0install.convert._specifiers import convert_specifiers
-from pypi_to_0install.convert._version import convert_version, after_version
+from pypi_to_0install.convert._version import convert_version, parse_version
 from pypi_to_0install.main import Context
 import logging
 
@@ -212,7 +212,7 @@ def test_all_invalid(context, caplog):
     ('>1,>2,>3', '{}..'.format(convert_version('3.1.dev'))),
     ('>=1,>=2,>=3', '{}..'.format(convert_version('3'))),
     ('<1,<2,<3', '..!{}'.format(convert_version('1.dev'))),
-    ('<=1,<=2,<=3', '..!{}'.format(after_version(convert_version('1')))),
+    ('<=1,<=2,<=3', '..!{}'.format(parse_version('1').after_version().format_zi())),
     ('==1.*,==1.1.*', '{}..!{}'.format(  # ==1.1.*
         convert_version('1.1.dev'),
         convert_version('1.2.dev'),
@@ -222,22 +222,22 @@ def test_all_invalid(context, caplog):
         convert_version('2.dev'),
     )),
     ('>1,!=2.1,<=3', '{}..!{} | {}..!{}'.format(
-        after_version(convert_version('1')),
+        parse_version('1.1.dev').format_zi(),
         convert_version('2.1'),
-        after_version(convert_version('2.1')),
-        after_version(convert_version('3')),
+        parse_version('2.1').after_version().format_zi(),
+        parse_version('3').after_version().format_zi(),
     )),
     ('==1.*,!=1.1.dev1,<1.2', '{}..!{} | {}..!{}'.format(
         convert_version('1.dev'),
         convert_version('1.1.dev1'),
-        after_version(convert_version('1.1.dev1')),
-        convert_version('1.2'),
+        parse_version('1.1.dev1').after_version().format_zi(),
+        convert_version('1.2.dev'),
     )),
     ('==1,===1', convert_version('1')),
     ('~=1.1,==1.*,!=1.2.b1,>1,>=1.b1,<3,<=2.1', '{}..!{} | {}..!{}'.format(  # ~=1.1,!=1.2.b1
         convert_version('1.1'),
         convert_version('1.2.b1'),
-        after_version(convert_version('1.2.b1')),
+        parse_version('1.2.b1').after_version().format_zi(),
         convert_version('2.dev'),
     )),
 ))

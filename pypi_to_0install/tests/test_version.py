@@ -23,10 +23,10 @@ import pytest
 import numpy as np
 from packaging.version import parse as py_parse_version
 from zeroinstall.injector.versions import parse_version as zi_parse_version
-from pypi_to_0install.convert._version import convert_version, after_version, InvalidVersion, parse_version
+from pypi_to_0install.convert._version import convert_version, InvalidVersion, parse_version
 from chicken_turtle_util import iterable
 
-def test_convert():
+def test_convert_version():
     '''
     convert_version converts according to spec
     '''
@@ -50,45 +50,49 @@ def test_convert():
     
 def test_ordering(versions):
     '''
-    convert_version does not change version ordering
+    parse_version(v).format_zi() does not change version ordering
     '''
     versions = sorted(versions)
+    indices = range(len(versions))
     
     # Python ordering
     py_versions = list(map(py_parse_version, versions))
-    py_sort_indices = sorted(range(len(versions)), key=py_versions.__getitem__)
+    py_sort_indices = sorted(indices, key=py_versions.__getitem__)
+    
+    # Internal ordering
+    internal_versions = list(map(parse_version, versions))
+    internal_sort_indices = sorted(indices, key=internal_versions.__getitem__)
     
     # ZI ordering
-    converted_versions = list(map(convert_version, versions))
-    zi_versions = list(map(zi_parse_version, converted_versions))
-    zi_sort_indices = sorted(range(len(versions)), key=zi_versions.__getitem__)
+    converted_versions = [version.format_zi() for version in internal_versions] 
+    zi_versions = [zi_parse_version(version) for version in converted_versions]
+    zi_sort_indices = sorted(indices, key=zi_versions.__getitem__)
     
-    # Assert
+    # Assert each ordering is the same
     print(np.array(versions)[py_sort_indices[:10]])
     print(np.array(versions)[zi_sort_indices[:10]])
     print(np.array(converted_versions)[py_sort_indices[:10]])
     print(np.array(converted_versions)[zi_sort_indices[:10]])
+    np.testing.assert_array_equal(py_sort_indices, internal_sort_indices)
     np.testing.assert_array_equal(py_sort_indices, zi_sort_indices)
     
 def test_after_version(versions):
     '''
     version..!after_version does not contain any other version
-    
-    This test checks that after_version appears directly after its given version
-    when all versions are sorted.
     '''
     # Convert and sort versions
-    converted_versions = list(map(convert_version, versions))
-    converted_versions = sorted(converted_versions, key=zi_parse_version)
+    internal_versions = sorted(map(parse_version, versions))
     
     # Insert the after_version directly after each version
-    versions_ = ((version, after_version(version)) for version in converted_versions)
+    versions_ = ((version, version.after_version()) for version in internal_versions)
     versions_ = [version for versions in versions_ for version in versions]
     
     # Assert versions are still sorted after inserting the after versions
     indices = list(range(len(versions_)))
-    sorted_indices = sorted(indices, key=lambda i: zi_parse_version(versions_[i]))
-    assert sorted_indices == indices
+    internal_sorted_indices = sorted(indices, key=versions_.__getitem__)
+    assert internal_sorted_indices == indices
+    zi_sorted_indices = sorted(indices, key=lambda i: zi_parse_version(versions_[i].format_zi()))
+    assert zi_sorted_indices == indices
     
 def test_local_version():
     '''
@@ -96,7 +100,7 @@ def test_local_version():
     '''
     with pytest.raises(InvalidVersion) as ex:
         parse_version('1+local')
-    assert ex.value.args[0] == "Got: '1+foobar'. Should be valid (public) PEP440 version"
+    assert ex.value.args[0] == "Got local version: '1+local'. Should be public version"
     
 #TODO check whether above tests are fairly complete
 #TODO test response to various invalid versions
