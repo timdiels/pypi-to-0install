@@ -8,7 +8,7 @@ For a weekly conversion, see pypi_to_0install.github.io TODO
 Documentation
 -------------
 
-See `ReadTheDocs`_
+See `Read The Docs`_
 
-.. _readthedocs: http://pypi-to-0install.readthedocs.io/en/latest/
+.. _read the docs: http://pypi-to-0install.readthedocs.io/en/latest/
 
