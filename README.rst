@@ -37,7 +37,7 @@ python3 should be at least python 3.4.
 Design
 ^^^^^^
 
-- `PyPI XMLRPC interface <pypi_xmlrpc_interface.rst>`_
-- `Conversion: general <conversion_general.rst>`_
-- `Conversion: packagetype specifics <conversion_packagetype_specifics.rst>`_
-- `Developer guide <developer_guide.rst>`_
+- `PyPI XMLRPC interface <doc/pypi_xmlrpc_interface.rst>`_
+- `Conversion: general <doc/conversion_general.rst>`_
+- `Conversion: packagetype specifics <doc/conversion_packagetype_specifics.rst>`_
+- `Developer guide <doc/developer_guide.rst>`_
