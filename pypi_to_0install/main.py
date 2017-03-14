@@ -15,10 +15,16 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
-from xmlrpc.client import ServerProxy
 import logging
+from pypi_to_0install.convert import convert
+from pypi_to_0install.various import zi, canonical_name 
+from xmlrpc.client import ServerProxy
 import attr
 from contextlib import contextmanager
+import contextlib
+from pathlib import Path
+import urllib.error
+from lxml import etree
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +39,7 @@ class Context(object):
     feed_logger = attr.ib()
     
     def feed_uri(self, zi_name):
-        return '{}{}.xml'.format(feeds_uri, zi_name)
+        return '{}{}.xml'.format(self.feeds_uri, zi_name)
     
 def main():
     context = Context(
@@ -51,7 +57,7 @@ def main():
 #         changed_packages = pypi.list_packages()  # [package_name :: str] #TODO should be a set
 #     else:
 #         serial = pypi.changelog_last_serial()
-#         changed_packages = changed_packages_since(last_serial)
+#         changed_packages = changed_packages_since(context, last_serial)
         #TODO save changed_packages and also save serial as last_serial
         #TODO add log messages to this part
     
@@ -61,7 +67,7 @@ def main():
     for pypi_name in changed_packages.copy(): #TODO when a package raises (only on some errors, e.g. a release_url disappeared), skip it and try again next run
         zi_name = canonical_name(pypi_name)
         feed_file = Path(zi_name + '.xml')
-        with feed_log_handler(feed_file.with_suffix('.log')):
+        with feed_log_handler(context, feed_file.with_suffix('.log')):
             try:
                 context.feed_logger.info('Updating {}'.format(pypi_name))
                 
@@ -87,7 +93,7 @@ def main():
                 context.feed_logger.info('Marked up to date')
             except urllib.error.HTTPError:
                 context.feed_logger.exception('Error occurred, will retry updating package on next run')
-                
+
 def load_changed_packages():
     with open('changed_packages') as f:
         return set(f.read().split())
@@ -107,26 +113,30 @@ def write_last_serial(last_serial):
 def configure_logging(context): #TODO manually test feed logger and main logger are set up correctly
     root_logger = logging.getLogger()
     
-    # log info to stderr in terse format
+    # Reset logging (zeroinstall calls logging.basicConfig when imported, naughty naughty)
+    while root_logger.handlers:
+        root_logger.removeHandler(root_logger.handlers[-1])
+    
+    # Log info to stderr in terse format
     stderr_handler = logging.StreamHandler() # to stderr
     stderr_handler.setFormatter(logging.Formatter('{levelname[0]}: {message}', style='{'))
     root_logger.addHandler(stderr_handler)
     
-    # log debug to file in full format
+    # Log debug to file in full format
     file_handler = logging.FileHandler('pypi_to_0install.log')
     file_handler.setFormatter(logging.Formatter('{levelname[0]} {asctime}: {message}', style='{'))
     root_logger.addHandler(file_handler)
-    
-    # noise levels
+     
+    # Noise levels
     root_logger.setLevel(logging.INFO)
     logging.getLogger('pypi_to_0install').setLevel(logging.DEBUG)
     context.feed_logger.setLevel(logging.DEBUG)
-    
+     
     stderr_handler.setLevel(logging.DEBUG)
     file_handler.setLevel(logging.DEBUG)
     
 @contextmanager
-def feed_log_handler(log_file):
+def feed_log_handler(context, log_file):
     file_handler = logging.FileHandler(str(log_file))
     with contextlib.closing(file_handler):
         file_handler.setLevel(logging.INFO)
@@ -145,8 +155,8 @@ def feed_log_handler(log_file):
 #have a time limit on the whole process at which we stop work, leaving the rest
 #for the next run (Travis time limit)
     
-def changed_packages_since(serial):
-    changes = pypi.changelog_since_serial(last_serial)  # list of five-tuples (name, version, timestamp, action, serial) since given serial
+def changed_packages_since(context, serial):
+    changes = context.pypi.changelog_since_serial(serial)  # list of five-tuples (name, version, timestamp, action, serial) since given serial
     return [change[0] for change in changes]
 
 #TODO

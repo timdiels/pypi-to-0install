@@ -16,7 +16,6 @@
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
 from lxml import etree
-from lxml.builder import ElementMaker
 from pathlib import Path
 from contextlib import contextmanager
 import contextlib
@@ -27,9 +26,14 @@ from tempfile import TemporaryDirectory
 from urllib.request import urlretrieve
 import urllib.error
 import pkginfo
+from pypi_to_0install.various import zi, zi_nsmap, canonical_name
+from ._version import parse_version
+from ._specifiers import convert_specifiers
+import logging
+from collections import defaultdict
+import pkg_resources
 
-zi_nsmap = {None: 'http://zero-install.sourceforge.net/2004/injector/interface'}
-zi = ElementMaker(namespace=zi_nsmap[None], nsmap=zi_nsmap)
+logger = logging.getLogger(__name__)
 
 def convert(context, pypi_name, zi_name, old_feed):
     '''
@@ -49,7 +53,7 @@ def convert(context, pypi_name, zi_name, old_feed):
     
     # Add <implementation>s to feed
     for version in versions:
-        zi_version = convert_version(version)
+        zi_version = parse_version(version).format_zi()
         for release_url in context.pypi.release_urls(pypi_name, version):
             package_type = release_url['packagetype']
             action = 'Converting' if package_type == 'sdist' else 'Skipping' 
@@ -148,12 +152,6 @@ def convert_general(context, pypi_name, zi_name, release_data):
         
     return etree.ElementTree(interface)
 
-def canonical_name(pypi_name):
-    '''
-    Get canonical ZI name
-    '''
-    return re.sub(r"[-_.]+", "-", pypi_name).lower()
-
 def convert_distribution(context, pypi_name, zi_name, zi_version, feed, old_feed, release_data, release_url): #TODO rm unused params
     # Add from old_feed if it already has it (distributions can be deleted, but not changed or reuploaded)
     implementations = old_feed.xpath('//implementation[@id={!r}]'.format(release_url['path']))
@@ -186,12 +184,11 @@ def convert_distribution(context, pypi_name, zi_name, zi_version, feed, old_feed
             implementation.set('license', licenses[0])
             
         # Convert dependencies
-        convert_dependencies(implementation, egg_info_path)
+        convert_dependencies(context, implementation, egg_info_directory)
         
         # Add to feed
         feed.getroot().append(implementation)
-        print((etree.tostring(feed, pretty_print=True)).decode()) #TODO check id=path
-        print(package.requires)
+        print((etree.tostring(feed, pretty_print=True)).decode())
         assert False
 
 def stability(pypi_version):
@@ -235,51 +232,44 @@ class ZIRequirement(object):
     '''
     
     required = attr.ib()  # True iff importance='required' 
-    version = attr.ib()  # str
+    specifiers = attr.ib()  # [(operator :: str, version :: str)]. Python specifier list
     
-# rm if unused
-@attr.s(frozen=True)
-class ZIConstraint(object):
-    
-    '''
-    Represents <version not-before={} before={}> constraint
-    '''
-    
-    not_before = attr.ib(default=None)  # zi_version :: str None
-    before = attr.ib(default=None)  # zi_version :: str or None
-
-
-def convert_dependencies(implementation, egg_info_path):
+def convert_dependencies(context, implementation, egg_info_path):
     # Parse requirements
-    all_requirements = parse_requirements(egg_info_path).items()
+    all_requirements = parse_requirements(egg_info_path)
     
     # Split into ZI required and recommended
-    zi_requirements = defaultdict(lambda: ZIRequirement(required=False, constraints=[]))  # pypi_name => ZIDependency
+    zi_requirements = defaultdict(lambda: ZIRequirement(required=False, specifiers=[]))  # pypi_name => ZIRequirement
     extras = [extra for extra in all_requirements if extra is not None]
     if extras:
         context.feed_logger.warning(
             'Has extras. Each extra requirement item will be selected when '
             'possible with disregard of which extra the requirement belongs to. '
             'Extras: {}'
-            .format(', '.join(extras))
+            .format(', '.join(map(repr, extras)))
         )
     if any(':' in extra for extra in extras):
         context.feed_logger.warning('Some extras have environment markers. Environment markers are ignored.')
-    for extra, requirement in all_requirements.items():
-        if requirement.marker:
-            context.feed_logger.warning('Marker ignored: {};{}'.format(requirement.name, requirement.marker))
-        if requirement.key:
-            context.feed_logger.warning('Key ignored: {}[{}]'.format(requirement.name, requirement.key))
-        zi_requirement = zi_requirements[requirement.name]
-        if not requirement.marker and not extra:
-            zi_requirement.required = True
-        zi_requirement.constraints.extend(convert_specifiers(requirement.specs))
+    for extra, requirements in all_requirements.items():
+        for requirement in requirements:
+            # Note: requirement.key appears to be the name of extra, so can be ignored without warning
+            if requirement.marker:
+                context.feed_logger.warning('Marker ignored: {};{}'.format(requirement.name, requirement.marker))
+            zi_requirement = zi_requirements[requirement.name]
+            if not requirement.marker and not extra:
+                zi_requirement.required = True
+            zi_requirement.specifiers.extend(requirement.specs)
     
     # Convert
-    assert False
-#     requires = zi.requires(interface=, importance=)
-    implementation.append(requires)
-    # TODO <requires..>
+    for pypi_name, zi_requirement in zi_requirements.items():
+        requires = zi.requires(
+            interface=context.feed_uri(canonical_name(pypi_name)),
+            importance='essential' if zi_requirement.required else 'recommended'
+        )
+        version_expression = convert_specifiers(context, zi_requirement.specifiers)
+        if version_expression:
+            requires.set('version', version_expression)
+        implementation.append(requires)
     
 def parse_requirements(egg_info_directory):
     '''
