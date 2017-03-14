@@ -23,8 +23,9 @@ import pytest
 import numpy as np
 from packaging.version import parse as py_parse_version
 from zeroinstall.injector.versions import parse_version as zi_parse_version
-from pypi_to_0install.convert._version import convert_version, InvalidVersion, parse_version
+from pypi_to_0install.convert._version import InvalidVersion, parse_version
 from chicken_turtle_util import iterable
+from .common import convert_version
 
 def test_convert_version():
     '''

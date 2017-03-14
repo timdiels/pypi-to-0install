@@ -180,14 +180,6 @@ class Modifier(object):
 class InvalidVersion(Exception):
     pass
         
-#TODO mv to tests, no longer used in 'real' code
-def convert_version(version):
-    '''
-    Get ZI version string given a Python version string
-    '''
-    version = parse_version(version)
-    return version.format_zi()
-        
 def parse_version(version, trim_zeros=True):
     '''
     Parse Python version string

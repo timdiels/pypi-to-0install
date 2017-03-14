@@ -24,8 +24,9 @@ from packaging.specifiers import SpecifierSet
 from pkg_resources import Requirement
 from zeroinstall.injector.versions import parse_version_expression, parse_version as zi_parse_version 
 from pypi_to_0install.convert._specifiers import convert_specifiers
-from pypi_to_0install.convert._version import convert_version, parse_version
+from pypi_to_0install.convert._version import parse_version
 from pypi_to_0install.main import Context
+from .common import convert_version
 import logging
 
 feed_logger_name = __name__ + ':feed_logger'
