@@ -73,30 +73,65 @@ Additional attributes and content of each ``<implementation>`` depends on the
 Version conversion
 ------------------
 As `Python <python versioning_>`_ and `ZI versioning`_ schemes
-differ, conversion is required. Given a Python version::
+differ, conversion is required. Given a Python conversion, we convert it to a
+normalised Python version (via `packaging.version.parse`_), which gives us::
 
-    [{epoch}!]{release}[{prerelease_type}{prerelease_number}][.post{post_number}][.dev{dev_number}]
+    {epoch}!{release}[{prerelease_type}{prerelease_number}][.post{post_number}][.dev{dev_number}]
 
 Where:
 
 - ``[]`` denotes optional part
 - ``release := N(.N)*``, with ``N`` an integer
 - ``prerelease_type := a|b|rc``
+- ``epoch, prerelease_number, post_number, dev_number`` are non-negative
+  numbers
 
-This is converted to::
+This is converted to the ZI version::
 
-    {epoch}-{release}[-{prerelease}][-post{post_number}][-{dev_number}]
+    {epoch}-{stripped_release}-{modifiers}
 
 Where:
 
-- `epoch` is 0 if epoch segment was omitted
-- when `prerelease_type` is:
-  
-  - ``a``, ``prerelease = pre0.{prerelease_number}``
-  - ``b``, ``prerelease = pre1.{prerelease_number}``
-  - ``rc``, ``prerelease = rc{prerelease_number}``
+- ``stripped_release`` is ``release`` with trailing ``.0`` components trimmed
+  off. This is necessary due to ``1 < 1.0`` in ZI, while ``1 == 1.0`` in
+  Python.
 
-This conversion does not affect version ordering (**TODO** review this is true).
+- ``modifiers`` is a list of up to 3 modifiers where prereleases, post and dev
+  segments are considered modifiers. Modifiers are joined by ``-``, e.g.
+  ``{modifiers[0]}-{modifier[1]}``. A modifier is formatted as::
+
+      {type}.{number}
+
+  where:
+
+  - ``type`` is a number derived from this mapping::
+
+        types = {
+          'dev': 0,
+          'a': 1,
+          'b': 2,
+          'rc': 3,
+          'post': 5,
+        }
+
+  - ``number`` is one of ``prerelease_number``, ``post_number``,
+    ``dev_number``, depending on the modifier type.
+
+  When a version has less than the maximum amount of modifiers, i.e. less than
+  3, an empty modifier (``-4``) is appended to the list. This ensures
+  correct version ordering.
+
+  Some examples of modifier conversion::
+
+      a10.post20.dev30 -> 1.10-5.20-0.30
+      b10.dev30 -> 2.10-0.30-4
+      post20.dev30 -> 5.20-0.30-4
+      dev30 -> 0.30-4
+      rc10 -> 3.10-4
+
+For examples of the whole conversion, see `test_convert_version`_.
+
+This conversion does not change version ordering.
 
 Dependency conversion
 ---------------------
@@ -138,7 +173,9 @@ is converted to::
       <requires interface='.../feeds/somepkg.xml' importance='recommended' />
 
 .. _trove classifiers: http://www.catb.org/~esr/trove/
-.. _python versioning: http://0install.net/interface-spec.html#versions
-.. _zi versioning: https://www.python.org/dev/peps/pep-0440/#version-scheme
+.. _python versioning: https://www.python.org/dev/peps/pep-0440/#version-scheme
+.. _zi versioning: http://0install.net/interface-spec.html#versions
 .. _conditional dependencies: https://hynek.me/articles/conditional-python-dependencies/
 .. _environment markers: https://www.python.org/dev/peps/pep-0508/
+.. _test_convert_version: https://github.com/timdiels/pypi-to-0install/blob/master/pypi_to_0install/tests/test_version.py#L30
+.. _packaging.version.parse: https://packaging.pypa.io/en/latest/version/#packaging.version.parse
