@@ -1,4 +1,4 @@
-Conversion: general
+Conversion: General
 ===================
 This details how PyPI packages are converted to ZI feeds. Parts specific to the
 `packagetype` (sdist, wheel, ...) are detailed in the other conversion pages.

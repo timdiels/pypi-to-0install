@@ -1,5 +1,5 @@
-Packagetype specifics
-=====================
+Conversion: Packagetype specifics
+=================================
 This documents the parts of the conversion that depend on the `packagetype` of
 each download (from ``release_urls``). These only affect ``<implementation>``.
 There can be multiple download urls for the same version, each can have a
@@ -154,7 +154,7 @@ Notes:
 - ``release_urls['packagetype'] == 'bdist_wheel'``
 
 - can derive `arch` from ``release_urls['filename']``. See the `PyPI XMLRPC
-  interface notes <pypi_xml_interface.rst>`_.
+  interface notes`_.
 
 - bdist_egg and bdist_wininst can be converted to a wheel
 
@@ -174,7 +174,7 @@ Notes:
 - ``release_urls['packagetype'] == 'bdist_egg'``
 
 - can derive `arch` from ``release_urls['filename']``. See the `PyPI XMLRPC
-  interface notes <pypi_xml_interface.rst>`_ (follow the link to the egg file
+  interface notes`_ (follow the link to the egg file
   name convention and search it for "Filename-Embedded Metadata").
 
 - for an example of eggs, see the pymongo project on PyPI
@@ -184,5 +184,6 @@ Notes:
 
 .. _distutils scripts: https://docs.python.org/2/distutils/setupscript.html#distutils-installing-scripts
 .. _pkg_resources.resource_stream: http://setuptools.readthedocs.io/en/latest/pkg_resources.html#basic-resource-access
-.. _conversion general: conversion_general.rst
 .. _script generation: https://github.com/pypa/pip/blob/403e398330c8e841e4633aceda859430f5f7b913/pip/_vendor/distlib/scripts.py
+.. _PyPI XMLRPC interface notes: pypi_xmlrpc_interface.html
+.. _conversion general: conversion_general.html
