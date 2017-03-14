@@ -19,3 +19,4 @@ src/doc/sphinx/_build
 run
 test
 *.log
+zeroinstall
