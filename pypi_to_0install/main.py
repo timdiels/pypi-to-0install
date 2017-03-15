@@ -38,8 +38,16 @@ class Context(object):
     pypi_mirror = attr.ib()  # uri of PyPI mirror to use for downloads, if any
     feed_logger = attr.ib()
     
-    def feed_uri(self, zi_name):
-        return '{}{}.xml'.format(self.feeds_uri, zi_name)
+    def feed_uri(self, zi_name, converted=True):
+        '''
+        converted : bool
+            True if the feed was converted from a PyPI package
+        '''
+        return '{}{}{}.xml'.format(
+            self.feeds_uri,
+            'converted/' if converted else '',
+            zi_name
+        )
     
 def main():
     context = Context(

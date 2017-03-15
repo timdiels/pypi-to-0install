@@ -18,8 +18,11 @@
 import re
 from lxml.builder import ElementMaker
 
-zi_nsmap = {None: 'http://zero-install.sourceforge.net/2004/injector/interface'}
-zi = ElementMaker(namespace=zi_nsmap[None], nsmap=zi_nsmap)
+zi_namespaces = {
+    None: 'http://zero-install.sourceforge.net/2004/injector/interface',
+    'compile': 'http://zero-install.sourceforge.net/2006/namespaces/0compile'
+}
+zi = ElementMaker(namespace=zi_namespaces[None], nsmap=zi_namespaces)
 
 def canonical_name(pypi_name):
     '''
