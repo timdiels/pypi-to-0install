@@ -32,13 +32,14 @@ class Context(object):
     pypi = attr.ib()
     feeds_uri = attr.ib()  # the location where the feeds will be hosted
     pypi_mirror = attr.ib()  # uri of PyPI mirror to use for downloads, if any
+    feeds_directory = attr.ib()
     feed_logger = attr.ib()
     
     def feed_file(self, zi_name):
         '''
         Get local file path to feed 
         '''
-        return Path('feeds') / (zi_name + '.xml')
+        return self.feeds_directory / (zi_name + '.xml')
         
     def feed_uri(self, zi_name, converted=True):
         '''
@@ -60,6 +61,7 @@ def main():
     context = Context(
         pypi=ServerProxy('https://pypi.python.org/pypi', use_datetime=True),  # See https://wiki.python.org/moin/PyPIXmlRpc
         feeds_uri='https://timdiels.github.io/pypi-to-0install/feeds/',
+        feeds_directory=Path('feeds').absolute(),
         pypi_mirror='http://localhost/',
         feed_logger=logging.getLogger(__name__ + ':current_feed')
     )

@@ -26,10 +26,12 @@ import logging
 import attr
 import sys
 import shutil
+import os
 
 logger = logging.getLogger(__name__)
 
 def update(context):
+    os.makedirs(str(context.feeds_directory), exist_ok=True)
     state = _State.load()
     
     # Get list of changed packages
