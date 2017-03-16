@@ -1,0 +1,31 @@
+# Travis kills the build if a job takes longer than 50 min or if a job produces
+# no output for 10 min
+# See https://docs.travis-ci.com/user/customizing-the-build/#Build-Timeouts
+
+language: python
+sudo: false  # only set to required if you need it; it slows down the build
+#dist: trusty  # from 2014, the newest we can get at the moment; comes with mostly outdated software
+python:
+    # for available python environments versions, see
+    # https://docs.travis-ci.com/user/languages/python/#Choosing-Python-versions-to-test-against
+    - 3.5
+before_install:
+    # If any step fails, build aborts immediately
+    - pip3 install -U setuptools pip wheel
+install:
+    # If any step fails, build aborts immediately
+    - echo install
+    - pip install -r requirements.txt
+before_script:
+    # If any step fails, build aborts immediately
+    - git clone --depth=2 --branch=gh-pages "https://$GITHUB_TOKEN@github.com/timdiels/pypi-to-0install.git" pages
+    - cd pages
+script:
+    # If any step fails, stubbornly continues with next steps before failing.
+    # PWD is whereever before_script left us
+    - export PYTHONPATH="$TRAVIS_BUILD_DIR"
+    - echo TODO  #python -m pypi_to_0install.main
+after_script:
+    # This always runs, unless build failed before the script was started. PWD
+    # is whereever script left us
+    - $TRAVIS_BUILD_DIR/travis/deploy.sh
