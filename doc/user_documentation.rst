@@ -14,7 +14,16 @@ To install::
     mv 0install-2.3.4/zeroinstall .
     rm -rf 0install-2.3.4*  # cleanup, optional
 
-python3 should be at least python 3.4.
+python3 should be at least python 3.4. You also need to `install Zero Install`_
+such that ``0install`` is available on ``$PATH``.
+
+Lastly, the default GPG key will be used to sign feeds. If you don't have one,
+create it with ``gpg --gen-key``; do not use your real name, use something like
+"PyPI to 0install" to indicate this was signed by an algorithm, not by you
+personally. If you do not want to mess up your main GPG configuration, make a
+new GPG home directory first and point the environment var ``GNUPGHOME`` to it.
+To use a different key, set ``default-key {key_name}`` in
+``$GNUPGHOME/gpg.conf``.
 
 Running
 -------
@@ -23,3 +32,5 @@ To run::
     . $repo_root/venv/bin/activate
     export PYTHONPATH="$repo_root"
     python3 $repo_root/pypi_to_0install/main.py
+    
+.. _install zero install: http://0install.net/injector.html

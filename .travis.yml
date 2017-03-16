@@ -4,28 +4,47 @@
 
 language: python
 sudo: false  # only set to required if you need it; it slows down the build
-#dist: trusty  # from 2014, the newest we can get at the moment; comes with mostly outdated software
+
 python:
     # for available python environments versions, see
     # https://docs.travis-ci.com/user/languages/python/#Choosing-Python-versions-to-test-against
     - 3.5
+
 before_install:
     # If any step fails, build aborts immediately
     - pip3 install -U setuptools pip wheel
+
 install:
     # If any step fails, build aborts immediately
-    - echo install
     - pip install -r requirements.txt
+
 before_script:
     # If any step fails, build aborts immediately
-    - git clone --depth=2 --branch=gh-pages "https://$GITHUB_TOKEN@github.com/timdiels/pypi-to-0install.git" pages
-    - cd pages
+
+    # Get pages
+    - git clone --depth=2 --branch=gh-pages "https://$GITHUB_TOKEN@github.com/timdiels/pypi-to-0install.git"
+      pages
+
+    # Set up GPG
+    - cd $TRAVIS_BUILD_DIR/travis/gpg
+    - chmod 700 home
+    - chmod 600 home/gpg.conf
+    - export GNUPGHOME="$PWD/home"
+    - gpg --import pypi_to_0install_pub.gpg
+    - openssl aes-256-cbc -K $encrypted_8406031107f4_key -iv $encrypted_8406031107f4_iv
+      -in pypi_to_0install_priv.gpg.enc -out pypi_to_0install_priv.gpg -d
+    - gpg --allow-secret-key-import --import pypi_to_0install_priv.gpg
+    - rm -f pypi_to_0install_priv.gpg
+
+    # Enter pages
+    - cd $TRAVIS_BUILD_DIR/pages
+
 script:
     # If any step fails, stubbornly continues with next steps before failing.
     # PWD is whereever before_script left us
-    - export PYTHONPATH="$TRAVIS_BUILD_DIR"
-    - echo TODO  #python -m pypi_to_0install.main
+    - PYTHONPATH="$TRAVIS_BUILD_DIR" echo TODO  #python -m pypi_to_0install.main
+
 after_script:
     # This always runs, unless build failed before the script was started. PWD
     # is whereever script left us
-    - $TRAVIS_BUILD_DIR/travis/deploy.sh
+    - "$TRAVIS_BUILD_DIR/travis/deploy.sh"

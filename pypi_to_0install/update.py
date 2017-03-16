@@ -21,6 +21,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from lxml import etree
 from tempfile import NamedTemporaryFile
+import plumbum as pb
 import contextlib
 import logging
 import attr
@@ -137,9 +138,9 @@ def _update_feed(context, pypi_name):
         
         # Write feed
         with _atomic_write(feed_file) as f:
-            #TODO also sign it
             feed.write(f, pretty_print=True)
             f.close()
+            pb.local['0launch']('http://0install.net/2006/interfaces/0publish', '--xmlsign', f.name)
         assert False
         
         context.feed_logger.info('Feed written')
