@@ -28,7 +28,7 @@ from urllib.request import urlretrieve
 import urllib.error
 import pkginfo
 from pypi_to_0install.various import zi, zi_namespaces, canonical_name
-from ._version import parse_version
+from ._version import parse_version, InvalidVersion
 from ._specifiers import convert_specifiers
 import logging
 from collections import defaultdict
@@ -45,8 +45,14 @@ def convert(context, pypi_name, zi_name, old_feed):
     
     Returns
     -------
-    lxml.etree.ElementTree
+    feed : lxml.etree.ElementTree
+        ZI feed
+    failed_partially : bool
+        True iff conversion failed partially, e.g. failed to download archive.
+        Skipping unsupported conversions does not count as failure, e.g.
+        ignoring a ===foo specifier does not return True.
     '''
+    failed_partially = False
     show_hidden = True
     versions = context.pypi.package_releases(pypi_name, show_hidden)  # returns [version :: str]
     max_version = max(versions, key=parse_version)
@@ -57,7 +63,12 @@ def convert(context, pypi_name, zi_name, old_feed):
     
     # Add <implementation>s to feed
     for version in versions:
-        zi_version = parse_version(version).format_zi()
+        try:
+            zi_version = parse_version(version).format_zi()
+        except InvalidVersion as ex:
+            context.feed_logger.warning('Skipping release with invalid version: {}'.format(ex.args[0]))
+            continue
+            
         for release_url in context.pypi.release_urls(pypi_name, version):
             try:
                 package_type = release_url['packagetype']
@@ -66,13 +77,16 @@ def convert(context, pypi_name, zi_name, old_feed):
                 if action == 'Converting':
                     _convert_distribution(context, pypi_name, zi_name, zi_version, feed, old_feed, release_data, release_url)
             except _InvalidDownload as ex:
-                #TODO mark this conversion partial, i.e. needs to be revisited/redone at a later time
+                failed_partially = True
                 context.feed_logger.warning(
-                    'Failed to download distribution, retrying later. {}'
+                    'Failed to download distribution. {}'
                     .format(ex.args[0])
                 )
+            except urllib.error.URLError as ex:
+                failed_partially = True
+                context.feed_logger.warning('Failed to download distribution. Cause: {}'.format(ex))
                 
-    return feed
+    return feed, failed_partially
     
 def _convert_general(context, pypi_name, zi_name, release_data):
     '''
@@ -172,8 +186,6 @@ def _convert_distribution(context, pypi_name, zi_name, zi_version, feed, old_fee
         
         # Add to feed
         feed.getroot().append(implementation)
-        print((etree.tostring(feed, pretty_print=True)).decode())
-        assert False
         
 def _stability(pypi_version):
     pypi_version = parse_version(pypi_version)
