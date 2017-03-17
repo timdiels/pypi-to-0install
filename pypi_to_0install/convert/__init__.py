@@ -36,10 +36,11 @@ import pkg_resources
 from zeroinstall.zerostore import manifest
 import hashlib
 from chicken_turtle_util import path as path_
+import plumbum as pb
 
 logger = logging.getLogger(__name__)
 
-def convert(context, pypi_name, zi_name, old_feed):
+def convert(context, pypi_name, zi_name, old_feed, blacklisted_distributions):
     '''
     Convert PyPI package to ZI feed
     
@@ -52,6 +53,10 @@ def convert(context, pypi_name, zi_name, old_feed):
         Skipping unsupported conversions does not count as failure, e.g.
         ignoring a ===foo specifier does not return True.
     '''
+    def _blacklist(release_url):
+        context.feed_logger.warning('Blacklisting distribution, will not retry')
+        blacklisted_distributions[pypi_name].add(release_url['url'])
+        
     failed_partially = False
     show_hidden = True
     versions = context.pypi.package_releases(pypi_name, show_hidden)  # returns [version :: str]
@@ -70,6 +75,8 @@ def convert(context, pypi_name, zi_name, old_feed):
             continue
             
         for release_url in context.pypi.release_urls(pypi_name, version):
+            if release_url['url'] in blacklisted_distributions[pypi_name]:
+                continue
             try:
                 package_type = release_url['packagetype']
                 action = 'Converting' if package_type == 'sdist' else 'Skipping' 
@@ -85,6 +92,9 @@ def convert(context, pypi_name, zi_name, old_feed):
             except urllib.error.URLError as ex:
                 failed_partially = True
                 context.feed_logger.warning('Failed to download distribution. Cause: {}'.format(ex))
+            except _NoEggInfo as ex:
+                context.feed_logger.warning(ex.args[0])
+                _blacklist(release_url)
                 
     return feed, failed_partially
     
@@ -134,7 +144,8 @@ def _convert_distribution(context, zi_version, feed, old_feed, release_data, rel
     with _unpack_distribution(context, release_url) as unpack_directory:
         distribution_directory = next(unpack_directory.iterdir())
         context.feed_logger.debug('Converting')
-        egg_info_directory = next(distribution_directory.glob('*.egg-info'))
+        
+        egg_info_directory = _find_egg_info(distribution_directory)
         package = pkginfo.UnpackedSDist(str(egg_info_directory))
         requirements = _convert_dependencies(context, egg_info_directory)
         
@@ -185,6 +196,22 @@ def _convert_distribution(context, zi_version, feed, old_feed, release_data, rel
         
         # Add to feed
         feed.getroot().append(implementation)
+        
+def _find_egg_info(distribution_directory):
+    def egg_info_directory():
+        return next(distribution_directory.glob('*.egg-info'))
+    try:
+        return egg_info_directory()
+    except StopIteration:
+        with pb.local.cwd(str(distribution_directory)):
+            try:
+                pb.local['python']('setup.py', 'egg_info')
+            except pb.ProcessExecutionError as ex:
+                raise _NoEggInfo('Distribution has no *egg-info directory and setup.py has no egg_info command') from ex
+        return egg_info_directory()
+    
+class _NoEggInfo(Exception):
+    pass
         
 def _stability(pypi_version):
     pypi_version = parse_version(pypi_version)

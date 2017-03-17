@@ -21,6 +21,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from lxml import etree
 from tempfile import NamedTemporaryFile
+from collections import defaultdict
 import plumbum as pb
 import contextlib
 import logging
@@ -28,6 +29,7 @@ import attr
 import sys
 import shutil
 import os
+import pickle
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +51,7 @@ def update(context):
         errored = False
         for pypi_name in sorted(state.changed.copy()): #TODO tmp sorted, debug
             try:
-                failed_partially = _update_feed(context, pypi_name)
+                failed_partially = _update_feed(context, pypi_name, state.blacklisted_distributions)
                 if failed_partially:
                     context.feed_logger.warning('Partially updated, will retry failed parts on next run')
                 else:
@@ -69,32 +71,29 @@ def update(context):
 @attr.s
 class _State(object):
     
-    last_serial = attr.ib()  # int or None. None iff never updated before
-    changed = attr.ib()  # {pypi_name :: str}. Changed packages. Packages to update.
+    # int or None. None iff never updated before
+    last_serial = attr.ib()
+    
+    # {pypi_name :: str}. Changed packages. Packages to update.
+    changed = attr.ib()
+    
+    # defaultdict({pypi_name :: str => {distribution_url :: str}}).
+    # Distributions never to try converting (again)
+    blacklisted_distributions = attr.ib()
     
     _file = Path('state')
     
     @staticmethod
     def load():
         if _State._file.exists():
-            lines = _State._file.read_text().splitlines()
-            last_serial = int(lines[1])
-            changed = set(lines[4:])
+            with _State._file.open('rb') as f:
+                return pickle.load(f)
         else:
-            last_serial = None
-            changed = set()
-        return _State(last_serial, changed)
+            return _State(last_serial=None, changed=set(), blacklisted_distributions=defaultdict(set))
         
     def save(self):
-        with _atomic_write(_State._file, mode='w') as f:
-            f.write(
-                'Last serial:\n'
-                '{}\n'
-                '\n'
-                'Packages to update:\n'
-                .format(self.last_serial)
-            )
-            f.write('\n'.join(self.changed))
+        with _atomic_write(_State._file) as f:
+            pickle.dump(self, f)
     
 def _changed_packages_since(context, serial):
     changes = context.pypi.changelog_since_serial(serial)  # list of five-tuples (name, version, timestamp, action, serial) since given serial
@@ -112,7 +111,7 @@ def _feed_log_handler(context, log_file):
         finally:
             context.feed_logger.removeHandler(file_handler)
             
-def _update_feed(context, pypi_name):
+def _update_feed(context, pypi_name, blacklisted_distributions):
     '''
     Update feed
     
@@ -135,7 +134,7 @@ def _update_feed(context, pypi_name):
             feed = etree.ElementTree(zi.interface())
             
         # Convert to ZI feed
-        feed, failed_partially = convert(context, pypi_name, zi_name, feed)
+        feed, failed_partially = convert(context, pypi_name, zi_name, feed, blacklisted_distributions)
         
         # Write feed
         with _atomic_write(feed_file) as f:
