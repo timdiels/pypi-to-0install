@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -o errexit -o nounset
 
-if [ "$TRAVIS_BRANCH" != "new" ] #TODO master
+if [ "$TRAVIS_BRANCH" != "master" ]
 then
   echo "Not deploying as the commit was made against branch '$TRAVIS_BRANCH', not master"
   exit 0
