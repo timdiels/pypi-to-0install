@@ -43,27 +43,28 @@ def update(context):
     else:
         state.changed |= _changed_packages_since(context, state.last_serial)
     state.last_serial = newest_serial
-    state.save()
     
-    # Update/create feeds of changed packages
-    errored = False
-    for pypi_name in state.changed.copy():
-        try:
-            failed_partially = _update_feed(context, pypi_name)
-            if failed_partially:
-                context.feed_logger.warning('Partially updated, will retry failed parts on next run')
-            else:
-                context.feed_logger.info('Fully updated')
-                state.changed.remove(pypi_name)
-                state.save() 
-        except Exception:
-            errored = True
-            context.feed_logger.exception('Unhandled error occurred.')
-    
-    # Exit non-zero iff errored
-    if errored:
-        logger.error('There were errors, programmer required, see exception(s) in log')
-        sys.exit(1)
+    try:
+        # Update/create feeds of changed packages
+        errored = False
+        for pypi_name in sorted(state.changed.copy()): #TODO tmp sorted, debug
+            try:
+                failed_partially = _update_feed(context, pypi_name)
+                if failed_partially:
+                    context.feed_logger.warning('Partially updated, will retry failed parts on next run')
+                else:
+                    context.feed_logger.info('Fully updated')
+                    state.changed.remove(pypi_name)
+            except Exception:
+                errored = True
+                context.feed_logger.exception('Unhandled error occurred.')
+        
+        # Exit non-zero iff errored
+        if errored:
+            logger.error('There were errors, programmer required, see exception(s) in log')
+            sys.exit(1)
+    finally:
+        state.save()
 
 @attr.s
 class _State(object):
