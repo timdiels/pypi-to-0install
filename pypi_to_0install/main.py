@@ -30,10 +30,13 @@ logger = logging.getLogger(__name__)
 @attr.s(frozen=True)
 class Context(object):
     pypi = attr.ib()
-    feeds_uri = attr.ib()  # the location where the feeds will be hosted
+    base_uri = attr.ib()  # base URI where all files will be hosted
     pypi_mirror = attr.ib()  # uri of PyPI mirror to use for downloads, if any
-    feeds_directory = attr.ib()
     feed_logger = attr.ib()
+    
+    @property
+    def feeds_directory(self):
+        return Path('feeds').absolute()
     
     def feed_file(self, zi_name):
         '''
@@ -41,7 +44,7 @@ class Context(object):
         '''
         return self.feeds_directory / (zi_name + '.xml')
         
-    def feed_uri(self, zi_name, converted=True):
+    def feed_uri(self, zi_name):
         '''
         Get URI to feed
         
@@ -50,18 +53,31 @@ class Context(object):
         zi_name : str
         converted : bool
             True if the feed was converted from a PyPI package
+            
+        Returns
+        -------
+        str
         '''
-        return '{}{}{}.xml'.format(
-            self.feeds_uri,
-            'converted/' if converted else '',
-            zi_name
-        )
+        return '{}/feeds/{}.xml'.format(self.base_uri, zi_name)
+    
+    def script_uri(self, name):
+        '''
+        Get URI to PyPI to 0install script feed
+        
+        Parameters
+        ----------
+        name : str
+        
+        Returns
+        -------
+        str
+        '''
+        return '{}/pypi_to_0install/{}.xml'.format(self.base_uri, name)
     
 def main():
     context = Context(
         pypi=ServerProxy('https://pypi.python.org/pypi', use_datetime=True),  # See https://wiki.python.org/moin/PyPIXmlRpc
-        feeds_uri='https://timdiels.github.io/pypi-to-0install/feeds/',
-        feeds_directory=Path('feeds').absolute(),
+        base_uri='https://timdiels.github.io/pypi-to-0install/',
         pypi_mirror='http://localhost/',
         feed_logger=logging.getLogger(__name__ + ':current_feed')
     )

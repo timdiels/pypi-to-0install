@@ -93,7 +93,7 @@ def _convert_general(context, pypi_name, zi_name, release_data):
     Populate feed with general info from latest release_data
     '''
     interface = zi.interface(**{
-        'uri': context.feeds_uri + zi_name + '.xml',
+        'uri': context.feed_uri(zi_name),
         'min-injector-version': '0.48', #TODO check what we use, set accordingly
     })
     interface.append(zi.name(zi_name))
@@ -167,7 +167,7 @@ def _convert_distribution(context, pypi_name, zi_name, zi_version, feed, old_fee
             zi.command(
                 dict(name='compile'),
                 zi.runner(
-                    interface=context.feed_uri('convert_sdist', converted=False)
+                    interface=context.script_uri('convert_sdist')
                 ),
                 zi('{{{}}}implementation'.format(zi_namespaces['compile']),
                     source_implementation_attributes,
