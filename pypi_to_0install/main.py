@@ -24,9 +24,6 @@ import sys
 
 logger = logging.getLogger(__name__)
 
-#TODO manually check that:
-# append to a log file per feed
-
 @attr.s(frozen=True)
 class Context(object):
     pypi = attr.ib()
@@ -90,7 +87,7 @@ def main():
         logger.info('Interrupted')
         sys.exit(1)
         
-def configure_logging(context): #TODO manually test feed logger and main logger are set up correctly
+def configure_logging(context):
     root_logger = logging.getLogger()
     
     # Reset logging (zeroinstall calls logging.basicConfig when imported, naughty naughty)
