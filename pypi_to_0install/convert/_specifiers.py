@@ -36,9 +36,7 @@ def convert_specifiers(context, specifiers):
     ast = _specifiers_to_ast(context, specifiers)
     if not ast:
         return None
-    print(ast)
     ast = _remove_and(ast)
-    print(ast)
     ast = _simplify(ast)
     return ast.format_zi()
 

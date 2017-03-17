@@ -141,7 +141,6 @@ def _update_feed(context, pypi_name):
             feed.write(f, pretty_print=True)
             f.close()
             pb.local['0launch']('http://0install.net/2006/interfaces/0publish', '--xmlsign', f.name)
-        assert False
         
         context.feed_logger.info('Feed written')
     

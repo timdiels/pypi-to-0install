@@ -75,7 +75,7 @@ def convert(context, pypi_name, zi_name, old_feed):
                 action = 'Converting' if package_type == 'sdist' else 'Skipping' 
                 logger.info('{} {} distribution: {}'.format(action, package_type, release_url['filename']))
                 if action == 'Converting':
-                    _convert_distribution(context, pypi_name, zi_name, zi_version, feed, old_feed, release_data, release_url)
+                    _convert_distribution(context, zi_version, feed, old_feed, release_data, release_url)
             except _InvalidDownload as ex:
                 failed_partially = True
                 context.feed_logger.warning(
@@ -109,7 +109,6 @@ def _convert_general(context, pypi_name, zi_name, release_data):
     description = release_data['description']
     if description:
         description = pypandoc.convert_text(description, format='rst', to='plain')
-        description = description[:100] #TODO rm, debug 
         interface.append(zi.description(description))
         
     #TODO: <category>s from classifiers
@@ -120,7 +119,7 @@ def _convert_general(context, pypi_name, zi_name, release_data):
         
     return etree.ElementTree(interface)
 
-def _convert_distribution(context, pypi_name, zi_name, zi_version, feed, old_feed, release_data, release_url): #TODO rm unused params
+def _convert_distribution(context, zi_version, feed, old_feed, release_data, release_url):
     '''
     Append <implementation> to feed, converted from distribution
     '''
@@ -212,7 +211,6 @@ def _unpack_distribution(context, release_url):
     distribution_file = Path(urlretrieve(url)[0])  # returns temp file with correct extension
     
     # Check md5 hash
-    print(release_url['md5_digest'])
     expected_digest = release_url['md5_digest']
     if expected_digest:
         # Generate digest
@@ -228,7 +226,6 @@ def _unpack_distribution(context, release_url):
     # Unpack
     with TemporaryDirectory() as temporary_directory:
         temporary_directory = Path(temporary_directory)
-#         temporary_directory = Path('test') #TODO rm debug
         
         context.feed_logger.debug('Unpacking')
         unpack_directory = Path(extract_archive(str(distribution_file), outdir=str(temporary_directory), interactive=False, verbosity=-1))
