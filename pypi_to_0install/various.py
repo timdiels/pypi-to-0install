@@ -16,6 +16,7 @@
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
 import re
+import attr
 from lxml.builder import ElementMaker
 
 zi_namespaces = {
@@ -29,3 +30,14 @@ def canonical_name(pypi_name):
     Get canonical ZI name
     '''
     return re.sub(r"[-_.]+", "-", pypi_name).lower()
+            
+@attr.s
+class Blacklists(object):
+    
+    # Distributions never to try converting (again)
+    # {distribution_url :: str}
+    distributions = attr.ib(default=attr.Factory(set))
+    
+    # Versions that have been ignored
+    # {py_version :: str}
+    versions = attr.ib(default=attr.Factory(set))

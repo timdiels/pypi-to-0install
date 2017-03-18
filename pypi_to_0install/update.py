@@ -16,7 +16,7 @@
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
 from pypi_to_0install.convert import convert
-from pypi_to_0install.various import zi, canonical_name 
+from pypi_to_0install.various import zi, canonical_name, Blacklists
 from contextlib import contextmanager
 from pathlib import Path
 from lxml import etree
@@ -51,7 +51,7 @@ def update(context):
         errored = False
         for pypi_name in sorted(state.changed.copy()): #TODO tmp sorted, debug
             try:
-                failed_partially = _update_feed(context, pypi_name, state.blacklisted_distributions)
+                failed_partially = _update_feed(context, pypi_name, state.blacklists)
                 if failed_partially:
                     context.feed_logger.warning('Partially updated, will retry failed parts on next run')
                 else:
@@ -77,9 +77,8 @@ class _State(object):
     # {pypi_name :: str}. Changed packages. Packages to update.
     changed = attr.ib()
     
-    # defaultdict({pypi_name :: str => {distribution_url :: str}}).
-    # Distributions never to try converting (again)
-    blacklisted_distributions = attr.ib()
+    # defaultdict({pypi_name :: str => _Blacklists}).
+    blacklists = attr.ib()
     
     _file = Path('state')
     
@@ -89,7 +88,11 @@ class _State(object):
             with _State._file.open('rb') as f:
                 return pickle.load(f)
         else:
-            return _State(last_serial=None, changed=set(), blacklisted_distributions=defaultdict(set))
+            return _State(
+                last_serial=None,
+                changed=set(),
+                blacklists=defaultdict(Blacklists)
+            )
         
     def save(self):
         with _atomic_write(_State._file) as f:
@@ -111,9 +114,15 @@ def _feed_log_handler(context, log_file):
         finally:
             context.feed_logger.removeHandler(file_handler)
             
-def _update_feed(context, pypi_name, blacklisted_distributions):
+def _update_feed(context, pypi_name, blacklists):
     '''
     Update feed
+    
+    Parameters
+    ----------
+    context : Context
+    pypi_name : str
+    blacklists : various.Blacklists
     
     Returns
     -------
@@ -134,7 +143,7 @@ def _update_feed(context, pypi_name, blacklisted_distributions):
             feed = etree.ElementTree(zi.interface())
             
         # Convert to ZI feed
-        feed, failed_partially = convert(context, pypi_name, zi_name, feed, blacklisted_distributions)
+        feed, failed_partially = convert(context, pypi_name, zi_name, feed, blacklists[pypi_name])
         
         # Write feed
         with _atomic_write(feed_file) as f:

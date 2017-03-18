@@ -40,9 +40,17 @@ import plumbum as pb
 
 logger = logging.getLogger(__name__)
 
-def convert(context, pypi_name, zi_name, old_feed, blacklisted_distributions):
+def convert(context, pypi_name, zi_name, old_feed, blacklists):
     '''
     Convert PyPI package to ZI feed
+    
+    Parameters
+    ----------
+    context : Context
+    pypi_name : str
+    zi_name : str
+    old_feed : lxml.etree.ElementTree
+    blacklists : various.Blacklists
     
     Returns
     -------
@@ -53,29 +61,24 @@ def convert(context, pypi_name, zi_name, old_feed, blacklisted_distributions):
         Skipping unsupported conversions does not count as failure, e.g.
         ignoring a ===foo specifier does not return True.
     '''
-    def _blacklist(release_url):
+    def blacklist(release_url):
         context.feed_logger.warning('Blacklisting distribution, will not retry')
-        blacklisted_distributions[pypi_name].add(release_url['url'])
+        blacklists.distributions.add(release_url['url'])
         
     failed_partially = False
-    show_hidden = True
-    versions = context.pypi.package_releases(pypi_name, show_hidden)  # returns [version :: str]
-    max_version = max(versions, key=parse_version)
-    release_data = context.pypi.release_data(pypi_name, max_version)
+    versions = _versions(context, pypi_name, blacklists)
     
-    # Create feed with general info
+    # Create feed with general info based on the latest release_data of the
+    # latest version
+    py_versions = [pair[0] for pair in versions]
+    max_version = max(py_versions, key=parse_version)
+    release_data = context.pypi.release_data(pypi_name, max_version)
     feed = _convert_general(context, pypi_name, zi_name, release_data)
     
     # Add <implementation>s to feed
-    for version in versions:
-        try:
-            zi_version = parse_version(version).format_zi()
-        except InvalidVersion as ex:
-            context.feed_logger.warning('Skipping release with invalid version: {}'.format(ex.args[0]))
-            continue
-            
-        for release_url in context.pypi.release_urls(pypi_name, version):
-            if release_url['url'] in blacklisted_distributions[pypi_name]:
+    for py_version, zi_version in versions:
+        for release_url in context.pypi.release_urls(pypi_name, py_version):
+            if release_url['url'] in blacklists.distributions:
                 continue
             try:
                 package_type = release_url['packagetype']
@@ -94,9 +97,34 @@ def convert(context, pypi_name, zi_name, old_feed, blacklisted_distributions):
                 context.feed_logger.warning('Failed to download distribution. Cause: {}'.format(ex))
             except _NoEggInfo as ex:
                 context.feed_logger.warning(ex.args[0])
-                _blacklist(release_url)
+                blacklist(release_url)
                 
     return feed, failed_partially
+
+def _versions(context, pypi_name, blacklists):
+    '''
+    Get versions of package
+    
+    Returns
+    -------
+    [(py_version :: str, zi_version :: str)]
+    '''
+    show_hidden = True
+    py_versions = context.pypi.package_releases(pypi_name, show_hidden)  # returns [str]
+    versions = []
+    for py_version in py_versions:
+        if py_version in blacklists.versions:
+            continue
+        try:
+            zi_version = parse_version(py_version).format_zi()
+            versions.append((py_version, zi_version))
+        except InvalidVersion as ex:
+            context.feed_logger.warning(
+                'Blacklisting version {!r}, will not retry. Reason: {}'
+                .format(py_version, ex.args[0])
+            )
+            blacklists.versions.add(py_version)
+    return versions
     
 def _convert_general(context, pypi_name, zi_name, release_data):
     '''
