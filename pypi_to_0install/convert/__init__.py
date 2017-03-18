@@ -67,6 +67,8 @@ def convert(context, pypi_name, zi_name, old_feed, blacklists):
         
     failed_partially = False
     versions = _versions(context, pypi_name, blacklists)
+    if not versions:
+        raise NoValidRelease()
     
     # Create feed with general info based on the latest release_data of the
     # latest version
@@ -100,7 +102,16 @@ def convert(context, pypi_name, zi_name, old_feed, blacklists):
                 context.feed_logger.warning(ex.args[0])
                 blacklist(release_url)
                 
+    # If no implementations, and we converted all we could, raise it has no release
+    if not failed_partially and feed.find('{{{}}}implementation'.format(zi_namespaces[None])) is None:
+        raise NoValidRelease()
+    
     return feed, failed_partially
+
+class NoValidRelease(Exception):
+    '''
+    When a package has not a single valid release
+    '''
 
 def _versions(context, pypi_name, blacklists):
     '''

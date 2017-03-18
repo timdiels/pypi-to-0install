@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
-from pypi_to_0install.convert import convert
+from pypi_to_0install.convert import convert, NoValidRelease
 from pypi_to_0install.various import zi, canonical_name, Blacklists
 from contextlib import contextmanager
 from pathlib import Path
@@ -143,7 +143,11 @@ def _update_feed(context, pypi_name, blacklists):
             feed = etree.ElementTree(zi.interface())
             
         # Convert to ZI feed
-        feed, failed_partially = convert(context, pypi_name, zi_name, feed, blacklists[pypi_name])
+        try:
+            feed, failed_partially = convert(context, pypi_name, zi_name, feed, blacklists[pypi_name])
+        except NoValidRelease:
+            context.feed_logger.info('Package has no valid release, not generating a feed file')
+            return False
         
         # Write feed
         with _atomic_write(feed_file) as f:
