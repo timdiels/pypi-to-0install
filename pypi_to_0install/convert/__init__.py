@@ -255,10 +255,10 @@ class _NoEggInfo(Exception):
     pass
         
 def _stability(pypi_version):
-    pypi_version = parse_version(pypi_version)
-    if 'dev' in str(pypi_version):
+    version = parse_version(pypi_version)
+    if version.modifiers and version.modifiers[-1].type_ == 'dev':
         return 'developer'
-    elif pypi_version.is_prerelease:
+    elif version.is_prerelease:
         return 'testing'
     else:
         return 'stable'
