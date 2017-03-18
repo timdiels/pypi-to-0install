@@ -183,7 +183,7 @@ def _convert_distribution(context, zi_version, feed, old_feed, release_data, rel
     # Not in old feed, need to convert.
     with _unpack_distribution(context, release_url) as unpack_directory:
         distribution_directory = next(unpack_directory.iterdir())
-        context.feed_logger.debug('Converting')
+        context.feed_logger.debug('Generating <implementation>')
         
         egg_info_directory = _find_egg_info(distribution_directory)
         package = pkginfo.UnpackedSDist(str(egg_info_directory))
