@@ -75,6 +75,7 @@ def convert(context, pypi_name, zi_name, old_feed, blacklists):
     py_versions = [pair[0] for pair in versions]
     max_version = max(py_versions, key=parse_version)
     release_data = context.pypi.release_data(pypi_name, max_version)
+    release_data['version'] = max_version
     release_data = {k:v for k, v in release_data.items() if v is not None and v != ''}
     feed = _convert_general(context, pypi_name, zi_name, release_data)
     
