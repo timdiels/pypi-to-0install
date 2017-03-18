@@ -163,7 +163,7 @@ def _convert_general(context, pypi_name, zi_name, release_data):
         
     #TODO: <category>s from classifiers
     
-    classifiers = release_data.get('classifiers')
+    classifiers = release_data.get('classifiers', [])
     if 'Environment :: Console' in classifiers:  #TODO test
         interface.append(zi('needs-terminal'))
         
