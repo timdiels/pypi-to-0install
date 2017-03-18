@@ -73,6 +73,7 @@ def convert(context, pypi_name, zi_name, old_feed, blacklists):
     py_versions = [pair[0] for pair in versions]
     max_version = max(py_versions, key=parse_version)
     release_data = context.pypi.release_data(pypi_name, max_version)
+    release_data = {k:v for k, v in release_data.items() if v is not None and v != ''}
     feed = _convert_general(context, pypi_name, zi_name, release_data)
     
     # Add <implementation>s to feed
@@ -136,15 +137,15 @@ def _convert_general(context, pypi_name, zi_name, release_data):
     })
     interface.append(zi.name(zi_name))
     
-    summary = release_data.get('summary')
-    if summary:
-        interface.append(zi.summary(summary))
+    # Note: .get() or 'x' is not the same as .get(, 'x') when value can be '' 
+    summary = release_data.get('summary', 'Converted from PyPI; missing summary')
+    interface.append(zi.summary(summary))  # Note: required element
         
-    homepage = release_data['home_page']
+    homepage = release_data.get('home_page')
     if homepage:
         interface.append(zi.homepage(homepage))
         
-    description = release_data['description']
+    description = release_data.get('description')
     if description:
         description = pypandoc.convert_text(description, format='rst', to='plain')
         interface.append(zi.description(description))
