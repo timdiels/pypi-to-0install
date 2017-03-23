@@ -272,12 +272,13 @@ def _copy_egg_info(distribution_directory, destination_directory):
     Path
         egg-info directory in destination_directory
     '''
-    with pb.local.cwd(str(distribution_directory)):
+    for python in ('python2', 'python3'):
         try:
-            pb.local['python']('setup.py', 'egg_info', '--egg-base', str(destination_directory))
+            with pb.local.cwd(str(distribution_directory)):
+                pb.local[python]('setup.py', 'egg_info', '--egg-base', str(destination_directory))
+            return next(destination_directory.iterdir())
         except pb.ProcessExecutionError as ex:
             raise _NoEggInfo('setup.py has no egg_info command') from ex
-    return next(destination_directory.iterdir())
     
 class _NoEggInfo(Exception):
     '''
