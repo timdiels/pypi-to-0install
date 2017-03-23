@@ -51,8 +51,8 @@ def update(context):
         errored = False
         for pypi_name in sorted(state.changed.copy()): #TODO tmp sorted, debug
             try:
-                failed_partially = _update_feed(context, pypi_name, state.blacklists)
-                if failed_partially:
+                finished = _update_feed(context, pypi_name, state.blacklists)
+                if not finished:
                     context.feed_logger.warning('Partially updated, will retry failed parts on next run')
                 else:
                     context.feed_logger.info('Fully updated')
@@ -126,10 +126,8 @@ def _update_feed(context, pypi_name, blacklists):
     
     Returns
     -------
-    failed_partially : bool
-        True iff conversion failed partially, e.g. failed to download archive.
-        Skipping unsupported conversions does not count as failure, e.g.
-        ignoring a ===foo specifier does not return True.
+    finished : bool
+        See convert's return
     '''
     zi_name = canonical_name(pypi_name)
     feed_file = context.feed_file(zi_name)
@@ -144,10 +142,10 @@ def _update_feed(context, pypi_name, blacklists):
             
         # Convert to ZI feed
         try:
-            feed, failed_partially = convert(context, pypi_name, zi_name, feed, blacklists[pypi_name])
+            feed, finished = convert(context, pypi_name, zi_name, feed, blacklists[pypi_name])
         except NoValidRelease:
             context.feed_logger.info('Package has no valid release, not generating a feed file')
-            return False
+            return True
         
         # Write feed
         with _atomic_write(feed_file) as f:
@@ -157,7 +155,7 @@ def _update_feed(context, pypi_name, blacklists):
         
         context.feed_logger.info('Feed written')
     
-    return failed_partially
+    return finished
 
 @contextmanager
 def _atomic_write(destination, mode='w+b'):  #TODO move to CTU project

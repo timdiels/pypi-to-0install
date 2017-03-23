@@ -57,16 +57,18 @@ def convert(context, pypi_name, zi_name, old_feed, blacklists):
     -------
     feed : lxml.etree.ElementTree
         ZI feed
-    failed_partially : bool
-        True iff conversion failed partially, e.g. failed to download archive.
-        Skipping unsupported conversions does not count as failure, e.g.
-        ignoring a ===foo specifier does not return True.
+    finished : bool
+        True iff conversion finished. A conversion can be unfinished due to
+        temporary errors (e.g. a failed download); these unfinished parts will
+        be retried when called again. Conversion is not marked unfinished due to
+        dropping invalid/unsupported parts of the PyPI package; those parts will
+        not be retried.
     '''
     def blacklist(release_url):
         context.feed_logger.warning('Blacklisting distribution, will not retry')
         blacklists.distributions.add(release_url['url'])
         
-    failed_partially = False
+    finished = True
     versions = _versions(context, pypi_name, blacklists)
     if not versions:
         raise NoValidRelease()
@@ -91,24 +93,24 @@ def convert(context, pypi_name, zi_name, old_feed, blacklists):
                 logger.info('{} {} distribution: {}'.format(action, package_type, release_url['filename']))
                 if action == 'Converting':
                     _convert_distribution(context, zi_version, feed, old_feed, release_data, release_url)
-            except _InvalidDownload as ex:
-                failed_partially = True
+            except _InvalidDownload as ex:  # e.g. md5sum differs
+                finished = False
                 context.feed_logger.warning(
                     'Failed to download distribution. {}'
                     .format(ex.args[0])
                 )
             except urllib.error.URLError as ex:
-                failed_partially = True
+                finished = False
                 context.feed_logger.warning('Failed to download distribution. Cause: {}'.format(ex))
             except _InvalidDistribution as ex:
                 context.feed_logger.warning('Invalid distribution: {}'.format(ex.args[0]))
                 blacklist(release_url)
                 
     # If no implementations, and we converted all we could, raise it has no release
-    if not failed_partially and feed.find('{{{}}}implementation'.format(zi_namespaces[None])) is None:
+    if finished and feed.find('{{{}}}implementation'.format(zi_namespaces[None])) is None:
         raise NoValidRelease()
     
-    return feed, failed_partially
+    return feed, finished
 
 class NoValidRelease(Exception):
     '''
