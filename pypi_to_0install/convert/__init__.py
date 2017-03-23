@@ -255,12 +255,7 @@ def _find_distribution_directory(unpack_directory):
         distribution_directory = next(unpack_directory.iterdir())
         if (distribution_directory / 'setup.py').exists():
             return distribution_directory
-    raise _NoSetupPy()
-        
-class _NoSetupPy(Exception):
-    '''
-    Could not find setup.py
-    '''
+    raise _InvalidDistribution('Could not find setup.py')
         
 def _copy_egg_info(distribution_directory, destination_directory):
     '''
