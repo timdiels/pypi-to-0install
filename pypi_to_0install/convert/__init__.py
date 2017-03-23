@@ -273,18 +273,27 @@ def _find_egg_info(distribution_directory, output_directory):
     Path
         The egg-info directory
     '''
+    def is_valid(egg_info_directory):
+        return (egg_info_directory / 'PKG-INFO').exists()
+    
     # Try to find egg-info
     egg_info_directories = tuple(distribution_directory.glob('*.egg-info'))
     if len(egg_info_directories) == 1:
-        return egg_info_directories[0]
+        egg_info_directory = egg_info_directories[0]
+        if is_valid(egg_info_directory):
+            return egg_info_directory
     
     # Try to generate egg-info
     for python in ('python2', 'python3'):
         with suppress(pb.ProcessExecutionError, StopIteration):
             with pb.local.cwd(str(distribution_directory)):
                 pb.local[python]('setup.py', 'egg_info', '--egg-base', str(output_directory))
-                return next(output_directory.iterdir())
-    raise _InvalidDistribution('No *.egg-info directory and setup.py egg_info failed')
+                egg_info_directory = next(output_directory.iterdir())
+                if is_valid(egg_info_directory):
+                    return egg_info_directory
+    
+    # Failed to get valid egg-info
+    raise _InvalidDistribution('No valid *.egg-info directory and setup.py egg_info failed')
     
 def _stability(pypi_version):
     version = parse_version(pypi_version)
@@ -360,9 +369,9 @@ class _ZIRequirement(object):
     required = attr.ib()  # True iff importance='required' 
     specifiers = attr.ib()  # [(operator :: str, version :: str)]. Python specifier list
     
-def _convert_dependencies(context, egg_info_path):
+def _convert_dependencies(context, egg_info_directory):
     # Parse requirements
-    all_requirements = _parse_requirements(egg_info_path)
+    all_requirements = _parse_requirements(egg_info_directory)
     
     # Split into ZI required and recommended
     zi_requirements = defaultdict(lambda: _ZIRequirement(required=False, specifiers=[]))  # pypi_name => ZIRequirement
