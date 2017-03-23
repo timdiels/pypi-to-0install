@@ -18,7 +18,7 @@
 from copy import deepcopy
 from lxml import etree
 from pathlib import Path
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 import contextlib
 import attr
 import pypandoc
@@ -193,7 +193,7 @@ def _convert_distribution(context, zi_version, feed, old_feed, release_data, rel
         context.feed_logger.debug('Generating <implementation>')
         
         with TemporaryDirectory() as temporary_directory:
-            egg_info_directory = _copy_egg_info(distribution_directory, Path(temporary_directory))
+            egg_info_directory = _find_egg_info(distribution_directory, Path(temporary_directory))
             package = pkginfo.UnpackedSDist(str(egg_info_directory))
             requirements = _convert_dependencies(context, egg_info_directory)
         
@@ -257,29 +257,34 @@ def _find_distribution_directory(unpack_directory):
             return distribution_directory
     raise _InvalidDistribution('Could not find setup.py')
         
-def _copy_egg_info(distribution_directory, destination_directory):
+def _find_egg_info(distribution_directory, output_directory):
     '''
-    Copy *.egg-info directory to destination directory
+    Get *.egg-info directory
     
     Parameters
     ----------
     distribution_directory : Path
-        Directory with setup.py to copy egg-info from
-    destination_directory : Path
-        Directory to copy to
+        Directory with setup.py of the distribution
+    output_directory : Path
+        Directory to generate egg-info in if it is missing
         
     Returns
     -------
     Path
-        egg-info directory in destination_directory
+        The egg-info directory
     '''
+    # Try to find egg-info
+    egg_info_directories = tuple(distribution_directory.glob('*.egg-info'))
+    if len(egg_info_directories) == 1:
+        return egg_info_directories[0]
+    
+    # Try to generate egg-info
     for python in ('python2', 'python3'):
-        try:
+        with suppress(pb.ProcessExecutionError, StopIteration):
             with pb.local.cwd(str(distribution_directory)):
-                pb.local[python]('setup.py', 'egg_info', '--egg-base', str(destination_directory))
-            return next(destination_directory.iterdir())
-        except pb.ProcessExecutionError as ex:
-            raise _InvalidDistribution('setup.py has no egg_info command') from ex
+                pb.local[python]('setup.py', 'egg_info', '--egg-base', str(output_directory))
+                return next(output_directory.iterdir())
+    raise _InvalidDistribution('No *.egg-info directory and setup.py egg_info failed')
     
 def _stability(pypi_version):
     version = parse_version(pypi_version)
