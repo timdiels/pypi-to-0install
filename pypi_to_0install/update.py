@@ -144,7 +144,13 @@ def _update_feed(context, pypi_name, blacklists):
         try:
             feed, finished = convert(context, pypi_name, zi_name, feed, blacklists[pypi_name])
         except NoValidRelease:
-            context.feed_logger.info('Package has no valid release, not generating a feed file')
+            def log(action):
+                context.feed_logger.info('Package has no valid release, {} feed file'.format(action))
+            if feed_file.exists():
+                log(action='removing its')
+                feed_file.unlink()
+            else:
+                log(action='not generating a')
             return True
         
         # Write feed
