@@ -287,13 +287,13 @@ def _find_egg_info(distribution_directory, output_directory):
     for python in ('python2', 'python3'):
         with suppress(pb.ProcessExecutionError, StopIteration):
             with pb.local.cwd(str(distribution_directory)):
-                pb.local[python]('setup.py', 'egg_info', '--egg-base', str(output_directory))
+                pb.local[python]('setup.py', 'egg_info', '--egg-base', str(output_directory), timeout=10)
                 egg_info_directory = next(output_directory.iterdir())
                 if is_valid(egg_info_directory):
                     return egg_info_directory
     
     # Failed to get valid egg-info
-    raise _InvalidDistribution('No valid *.egg-info directory and setup.py egg_info failed')
+    raise _InvalidDistribution('No valid *.egg-info directory and setup.py egg_info failed or timed out')
     
 def _stability(pypi_version):
     version = parse_version(pypi_version)
