@@ -183,7 +183,7 @@ def _convert_distribution(context, zi_version, feed, old_feed, release_data, rel
     
     # Not in old feed, need to convert.
     with _unpack_distribution(context, release_url) as unpack_directory:
-        distribution_directory = next(unpack_directory.iterdir())
+        distribution_directory = _find_distribution_directory(unpack_directory)
         context.feed_logger.debug('Generating <implementation>')
         
         egg_info_directory = _find_egg_info(distribution_directory)
@@ -238,6 +238,23 @@ def _convert_distribution(context, zi_version, feed, old_feed, release_data, rel
         # Add to feed
         feed.getroot().append(implementation)
         
+def _find_distribution_directory(unpack_directory):
+    '''
+    Find the directory with setup.py
+    '''
+    if (unpack_directory / 'setup.py').exists():
+        return unpack_directory  # tar bomb
+    else:
+        distribution_directory = next(unpack_directory.iterdir())
+        if (distribution_directory / 'setup.py').exists():
+            return distribution_directory
+    raise _NoSetupPy()
+        
+class _NoSetupPy(Exception):
+    '''
+    Could not find setup.py
+    '''
+        
 def _find_egg_info(distribution_directory):
     def egg_info_directory():
         return next(distribution_directory.glob('*.egg-info'))
@@ -252,7 +269,9 @@ def _find_egg_info(distribution_directory):
         return egg_info_directory()
     
 class _NoEggInfo(Exception):
-    pass
+    '''
+    Could not find/generate *.egg-info directory
+    '''
         
 def _stability(pypi_version):
     version = parse_version(pypi_version)
