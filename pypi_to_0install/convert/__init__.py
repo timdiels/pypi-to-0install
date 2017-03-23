@@ -23,6 +23,7 @@ import contextlib
 import attr
 import pypandoc
 from patoolib import extract_archive
+import patoolib
 from tempfile import TemporaryDirectory
 from urllib.request import urlretrieve
 import urllib.error
@@ -99,8 +100,8 @@ def convert(context, pypi_name, zi_name, old_feed, blacklists):
             except urllib.error.URLError as ex:
                 failed_partially = True
                 context.feed_logger.warning('Failed to download distribution. Cause: {}'.format(ex))
-            except _NoEggInfo as ex:
-                context.feed_logger.warning(ex.args[0])
+            except _InvalidDistribution as ex:
+                context.feed_logger.warning('Invalid distribution: {}'.format(ex.args[0]))
                 blacklist(release_url)
                 
     # If no implementations, and we converted all we could, raise it has no release
@@ -113,6 +114,9 @@ class NoValidRelease(Exception):
     '''
     When a package has not a single valid release
     '''
+    
+class _InvalidDistribution(Exception):
+    pass
 
 def _versions(context, pypi_name, blacklists):
     '''
@@ -278,13 +282,8 @@ def _copy_egg_info(distribution_directory, destination_directory):
                 pb.local[python]('setup.py', 'egg_info', '--egg-base', str(destination_directory))
             return next(destination_directory.iterdir())
         except pb.ProcessExecutionError as ex:
-            raise _NoEggInfo('setup.py has no egg_info command') from ex
+            raise _InvalidDistribution('setup.py has no egg_info command') from ex
     
-class _NoEggInfo(Exception):
-    '''
-    Could not find/generate *.egg-info directory
-    '''
-        
 def _stability(pypi_version):
     version = parse_version(pypi_version)
     if version.modifiers and version.modifiers[-1].type_ == 'dev':
@@ -327,7 +326,13 @@ def _unpack_distribution(context, release_url):
         temporary_directory = Path(temporary_directory)
         
         context.feed_logger.debug('Unpacking')
-        unpack_directory = Path(extract_archive(str(distribution_file), outdir=str(temporary_directory), interactive=False, verbosity=-1))
+        try:
+            unpack_directory = Path(extract_archive(str(distribution_file), outdir=str(temporary_directory), interactive=False, verbosity=-1))
+        except patoolib.util.PatoolError as ex:
+            if 'unknown archive' in ex.args[0]:
+                raise _InvalidDistribution('Invalid archive or unknown archive format') from ex
+            else:
+                raise
         
         # Yield
         yield unpack_directory
