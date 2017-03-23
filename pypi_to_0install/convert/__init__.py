@@ -186,9 +186,10 @@ def _convert_distribution(context, zi_version, feed, old_feed, release_data, rel
         distribution_directory = _find_distribution_directory(unpack_directory)
         context.feed_logger.debug('Generating <implementation>')
         
-        egg_info_directory = _find_egg_info(distribution_directory)
-        package = pkginfo.UnpackedSDist(str(egg_info_directory))
-        requirements = _convert_dependencies(context, egg_info_directory)
+        with TemporaryDirectory() as temporary_directory:
+            egg_info_directory = _copy_egg_info(distribution_directory, Path(temporary_directory))
+            package = pkginfo.UnpackedSDist(str(egg_info_directory))
+            requirements = _convert_dependencies(context, egg_info_directory)
         
         implementation_attributes = dict(
             id=release_url['path'],
@@ -255,18 +256,28 @@ class _NoSetupPy(Exception):
     Could not find setup.py
     '''
         
-def _find_egg_info(distribution_directory):
-    def egg_info_directory():
-        return next(distribution_directory.glob('*.egg-info'))
-    try:
-        return egg_info_directory()
-    except StopIteration:
-        with pb.local.cwd(str(distribution_directory)):
-            try:
-                pb.local['python']('setup.py', 'egg_info')
-            except pb.ProcessExecutionError as ex:
-                raise _NoEggInfo('Distribution has no *egg-info directory and setup.py has no egg_info command') from ex
-        return egg_info_directory()
+def _copy_egg_info(distribution_directory, destination_directory):
+    '''
+    Copy *.egg-info directory to destination directory
+    
+    Parameters
+    ----------
+    distribution_directory : Path
+        Directory with setup.py to copy egg-info from
+    destination_directory : Path
+        Directory to copy to
+        
+    Returns
+    -------
+    Path
+        egg-info directory in destination_directory
+    '''
+    with pb.local.cwd(str(distribution_directory)):
+        try:
+            pb.local['python']('setup.py', 'egg_info', '--egg-base', str(destination_directory))
+        except pb.ProcessExecutionError as ex:
+            raise _NoEggInfo('setup.py has no egg_info command') from ex
+    return next(destination_directory.iterdir())
     
 class _NoEggInfo(Exception):
     '''
