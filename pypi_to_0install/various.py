@@ -61,5 +61,6 @@ def atomic_write(destination, mode='w+b'):  #TODO move to CTU project
         f.close()
         shutil.move(f.name, str(destination.absolute()))  # acts like `mv -f a b`
     except:
+        f.close()
         Path(f.name).unlink()
         raise
