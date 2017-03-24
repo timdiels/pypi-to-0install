@@ -20,8 +20,11 @@ Logging configuration and handlers
 '''
 
 import logging
+from logging.handlers import RotatingFileHandler
 from contextlib import contextmanager
 import contextlib
+from pathlib import Path
+import bz2
 
 def configure(context):
     _reset_logging()
@@ -61,7 +64,7 @@ def _add_stderr_handler(context):
     
 def _add_file_handler(context):
     # Create file handler with detailed format
-    file_handler = logging.FileHandler('pypi_to_0install.log')
+    file_handler = _CompressedRotatingFileHandler('pypi_to_0install.log', max_bytes=10**10)
     file_handler.setFormatter(logging.Formatter('{levelname[0]} {asctime}: {message}', style='{'))
     
     # Log all debug excluding the feed_logger unless it's an error
@@ -76,9 +79,13 @@ def _add_file_handler(context):
     # Add to root logger
     logging.getLogger().addHandler(file_handler)
     
+# Set max_bytes so that up to 150k packages can have a full log without
+# exceeding GitHub's 1GB repository size limit
+_feed_log_max_bytes = 2**30 // 150e3
+
 @contextmanager
 def feed_log_handler(context, log_file):
-    file_handler = logging.FileHandler(str(log_file))
+    file_handler = _CompressedRotatingFileHandler(str(log_file), _feed_log_max_bytes)
     with contextlib.closing(file_handler):
         file_handler.setLevel(logging.INFO)
         file_handler.setFormatter(logging.Formatter('{levelname[0]} {asctime}: {message}', style='{'))
@@ -87,3 +94,34 @@ def feed_log_handler(context, log_file):
             yield
         finally:
             context.feed_logger.removeHandler(file_handler)
+            
+def _CompressedRotatingFileHandler(file_name, max_bytes):
+    '''
+    Modify handler to bz2 compress when rotating
+    
+    Parameters
+    ----------
+    file_name : str
+    max_bytes : int
+        Max bytes that all log files combined may take (approximately)
+    '''
+    def namer(name):
+        return name + ".bz2"
+
+    def rotator(source, dest):
+        with open(source, "rb") as f:
+            data = f.read()
+        compressed = bz2.compress(data)
+        with open(dest, "wb") as f:
+            f.write(compressed)
+        Path(source).unlink()
+    
+    # Note: we expect a compression rate of 3.5. At this rate, 1 uncompressed
+    # log file of max_bytes / 2 + 3 compressed files is less than max_bytes
+    handler = RotatingFileHandler(file_name)#TODO tmp unlimited#, maxBytes=max_bytes // 2, backupCount=3)
+    
+    # Compress on rotate
+    handler.rotator = rotator
+    handler.namer = namer
+    
+    return handler
