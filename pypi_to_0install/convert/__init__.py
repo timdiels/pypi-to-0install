@@ -89,7 +89,7 @@ def convert(context, package, zi_name, old_feed):
             try:
                 package_type = release_url['packagetype']
                 action = 'Converting' if package_type == 'sdist' else 'Skipping' 
-                logger.info('{} {} distribution: {}'.format(action, package_type, release_url['filename']))
+                context.feed_logger.info('{} {} distribution: {}'.format(action, package_type, release_url['filename']))
                 if action == 'Converting':
                     _convert_distribution(context, zi_version, feed, old_feed, release_data, release_url)
             except _InvalidDownload as ex:  # e.g. md5sum differs
