@@ -56,11 +56,16 @@ def _default_workers():
     
 @click.command()
 @click.option('--workers', type=click.IntRange(min=1), default=_default_workers, help='Number of threads to use')
-def main(workers):
+@click.option(
+    '--pypi-mirror',
+    type=str,
+    help='PyPI mirror to use, e.g. http://localhost/ when using bandersnatch with default settings'
+)
+def main(workers, pypi_mirror):
     context = Context(
         pypi_uri='https://pypi.python.org/pypi',
         base_uri='https://timdiels.github.io/pypi-to-0install/',
-        pypi_mirror='http://localhost/',
+        pypi_mirror=pypi_mirror,
     )
     
     logging_.configure(context)
