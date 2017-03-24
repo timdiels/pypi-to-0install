@@ -18,6 +18,8 @@
 from pypi_to_0install.various import Package, atomic_write, zi, canonical_name
 from pypi_to_0install.convert import convert, NoValidRelease
 from pypi_to_0install.logging import feed_log_handler
+from tempfile import NamedTemporaryFile
+from textwrap import dedent, indent
 from pathlib import Path
 from multiprocessing.pool import Pool
 from lxml import etree
@@ -31,6 +33,9 @@ import os
 logger = logging.getLogger(__name__)
 
 def update(context, worker_count):
+    check_gpg_signing()
+    
+    # Load state
     os.makedirs(str(context.feeds_directory), exist_ok=True)
     state = _State.load()
     
@@ -92,6 +97,42 @@ def update(context, worker_count):
             logger.error('There were errors, programmer required, see exception(s) in log')
             sys.exit(1)
             
+def check_gpg_signing():
+    # Check GPG signing works
+    try:
+        # Sign a dummy feed
+        f = NamedTemporaryFile(delete=False)
+        try:
+            f.write(dedent('''\
+                <?xml version='1.0'?>
+                <interface xmlns='http://zero-install.sourceforge.net/2004/injector/interface'>
+                  <name>dummy</name>
+                  <summary>dummy</summary>
+                </interface>'''
+            ).encode())
+            f.close()
+            _sign_feed(f.name)
+        finally:
+            f.close()
+            Path(f.name).unlink()
+    except pb.ProcessExecutionError as ex:
+        # It doesn't work
+        shell = (
+            '$ {}\n'
+            '{}\n'
+            '{}'
+            .format(
+                ' '.join(ex.argv),
+                ex.stdout,
+                ex.stderr
+            )
+        )
+        logger.error(
+            'Failed to sign test feed, likely cause: no secret gpg key found.\n\n'
+            + indent(shell, '  ')
+        )
+        sys.exit(1)
+
 @attr.s(cmp=False, hash=False)
 class _State(object):
     
@@ -176,7 +217,7 @@ def _update_feed(args):
             with atomic_write(feed_file) as f:
                 feed.write(f, pretty_print=True)
                 f.close()
-                pb.local['0launch']('http://0install.net/2006/interfaces/0publish', '--xmlsign', f.name)
+                _sign_feed(f.name)
             
             context.feed_logger.info('Feed written')
         
@@ -184,3 +225,6 @@ def _update_feed(args):
     except Exception as ex:
         context.feed_logger.exception('Unhandled error occurred')
         return ex, False
+
+def _sign_feed(path):
+    pb.local['0launch']('http://0install.net/2006/interfaces/0publish', '--xmlsign', str(path))
