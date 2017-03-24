@@ -14,7 +14,7 @@ To install::
     mv 0install-2.3.4/zeroinstall .
     rm -rf 0install-2.3.4*  # cleanup, optional
 
-python3 should be at least python 3.4. You also need to `install Zero Install`_
+python3 should be at least python 3.5. You also need to `install Zero Install`_
 such that ``0install`` is available on ``$PATH``.
 
 Lastly, the default GPG key will be used to sign feeds. If you don't have one,

@@ -18,6 +18,10 @@
 import re
 import attr
 from lxml.builder import ElementMaker
+from tempfile import NamedTemporaryFile
+from contextlib import contextmanager
+from pathlib import Path
+import shutil
 
 zi_namespaces = {
     None: 'http://zero-install.sourceforge.net/2004/injector/interface',
@@ -30,14 +34,32 @@ def canonical_name(pypi_name):
     Get canonical ZI name
     '''
     return re.sub(r"[-_.]+", "-", pypi_name).lower()
-            
-@attr.s
-class Blacklists(object):
+    
+@attr.s(slots=True, cmp=False, hash=False)
+class Package(object):
+    
+    '''
+    A PyPI package
+    '''
+    
+    # pypi name
+    name = attr.ib()
     
     # Distributions never to try converting (again)
     # {distribution_url :: str}
-    distributions = attr.ib(default=attr.Factory(set))
+    blacklisted_distributions = attr.ib(default=attr.Factory(set))
     
     # Versions that have been ignored
     # {py_version :: str}
-    versions = attr.ib(default=attr.Factory(set))
+    blacklisted_versions = attr.ib(default=attr.Factory(set))
+
+@contextmanager
+def atomic_write(destination, mode='w+b'):  #TODO move to CTU project
+    f = NamedTemporaryFile(mode=mode, delete=False)
+    try:
+        yield f
+        f.close()
+        shutil.move(f.name, str(destination.absolute()))  # acts like `mv -f a b`
+    except:
+        Path(f.name).unlink()
+        raise
