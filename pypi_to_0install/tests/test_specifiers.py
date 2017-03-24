@@ -25,17 +25,19 @@ from pkg_resources import Requirement
 from zeroinstall.injector.versions import parse_version_expression, parse_version as zi_parse_version 
 from pypi_to_0install.convert._specifiers import convert_specifiers
 from pypi_to_0install.convert._version import parse_version
-from pypi_to_0install.main import Context
 from .common import convert_version
 import logging
+import attr
 
 feed_logger_name = __name__ + ':feed_logger'
+
+Context = attr.make_class('Context', ['feed_logger'])
 
 @pytest.fixture
 def context():
     feed_logger = logging.getLogger(feed_logger_name)
     feed_logger.setLevel(logging.DEBUG)
-    return Context(None, None, None, feed_logger)
+    return Context(feed_logger)
 
 def convert_specifiers_(context, specifiers):
     return convert_specifiers(context, Requirement.parse('a{}'.format(specifiers)).specs)
