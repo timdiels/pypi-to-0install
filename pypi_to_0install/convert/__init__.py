@@ -24,7 +24,7 @@ import attr
 import pypandoc
 from patoolib import extract_archive
 import patoolib
-from tempfile import TemporaryDirectory
+from tempfile import TemporaryDirectory, NamedTemporaryFile
 from urllib.request import urlretrieve
 import urllib.error
 import pkginfo
@@ -314,38 +314,40 @@ def _unpack_distribution(context, release_url):
     else:
         url = release_url['url']
     
-    # Download
-    context.feed_logger.debug('Downloading {}'.format(url))
-    distribution_file = Path(urlretrieve(url)[0])  # returns temp file with correct extension
+    with NamedTemporaryFile() as f:
+        # Download
+        context.feed_logger.debug('Downloading {}'.format(url))
+        distribution_file = Path(f.name)
+        urlretrieve(url, str(distribution_file))
     
-    # Check md5 hash
-    expected_digest = release_url['md5_digest']
-    if expected_digest:
-        # Generate digest
-        actual_digest = path_.hash(distribution_file, hashlib.md5).hexdigest()
+        # Check md5 hash
+        expected_digest = release_url['md5_digest']
+        if expected_digest:
+            # Generate digest
+            actual_digest = path_.hash(distribution_file, hashlib.md5).hexdigest()
+            
+            # If digest differs, raise
+            if actual_digest != expected_digest:
+                raise _InvalidDownload(
+                    'MD5 digest differs. Got {!r}, expected {!r}'
+                    .format(actual_digest, expected_digest)
+                )
         
-        # If digest differs, raise
-        if actual_digest != expected_digest:
-            raise _InvalidDownload(
-                'MD5 digest differs. Got {!r}, expected {!r}'
-                .format(actual_digest, expected_digest)
-            )
-    
-    # Unpack
-    with TemporaryDirectory() as temporary_directory:
-        temporary_directory = Path(temporary_directory)
-        
-        context.feed_logger.debug('Unpacking')
-        try:
-            unpack_directory = Path(extract_archive(str(distribution_file), outdir=str(temporary_directory), interactive=False, verbosity=-1))
-        except patoolib.util.PatoolError as ex:
-            if 'unknown archive' in ex.args[0]:
-                raise _InvalidDistribution('Invalid archive or unknown archive format') from ex
-            else:
-                raise
-        
-        # Yield
-        yield unpack_directory
+        # Unpack
+        with TemporaryDirectory() as temporary_directory:
+            temporary_directory = Path(temporary_directory)
+            
+            context.feed_logger.debug('Unpacking')
+            try:
+                unpack_directory = Path(extract_archive(str(distribution_file), outdir=str(temporary_directory), interactive=False, verbosity=-1))
+            except patoolib.util.PatoolError as ex:
+                if 'unknown archive' in ex.args[0]:
+                    raise _InvalidDistribution('Invalid archive or unknown archive format') from ex
+                else:
+                    raise
+            
+            # Yield
+            yield unpack_directory
         
 def _digest_of(directory):
     '''
