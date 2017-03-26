@@ -61,14 +61,21 @@ def _default_workers():
     type=str,
     help='PyPI mirror to use, e.g. http://localhost/ when using bandersnatch with default settings'
 )
-def main(workers, pypi_mirror):
+@click.option(
+    '-v', '--verbose', 'verbosity',
+    count=True, 
+    help='Verbosity level. Default prints nothing, '
+    '-v prints errors and minimal info, -vv prints all info. '
+    'This does not affect logging to files'
+)
+def main(workers, pypi_mirror, verbosity):
     context = Context(
         pypi_uri='https://pypi.python.org/pypi',
         base_uri='https://timdiels.github.io/pypi-to-0install/',
         pypi_mirror=pypi_mirror,
     )
     
-    logging_.configure(context)
+    logging_.configure(context, verbosity)
     
     # Clean exit on cancellation signals
     def cancel(signal_, frame):

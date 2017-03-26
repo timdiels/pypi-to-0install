@@ -26,58 +26,64 @@ import contextlib
 from pathlib import Path
 import bz2
 
-def configure(context):
-    _reset_logging()
-    _set_log_levels(context)
-    _add_stderr_handler(context)
-    _add_file_handler(context)
+def configure(context, verbosity):
+    def reset_logging():
+        # Note: zeroinstall calls logging.basicConfig when imported, naughty naughty
+        root_logger = logging.getLogger()
+        while root_logger.handlers:
+            root_logger.removeHandler(root_logger.handlers[-1])
+        
+    def set_log_levels():
+        # Filter out messages that no handler wants
+        logging.getLogger().setLevel(logging.INFO)
+        logging.getLogger('pypi_to_0install').setLevel(logging.DEBUG)
+        context.feed_logger.setLevel(logging.DEBUG)
+        
+    def add_stderr_handler():
+        if not verbosity:
+            return
+        
+        # Create stderr handler with terse format
+        stderr_handler = logging.StreamHandler()
+        stderr_handler.setFormatter(logging.Formatter('{levelname[0]}: {message}', style='{'))
+        
+        # Log all info
+        stderr_handler.setLevel(logging.INFO)
+        if verbosity == 1:
+            def filter_(record):
+                return (
+                    record.name != context.feed_logger.name or
+                    record.levelno >= logging.ERROR or
+                    record.msg.startswith('Updating ')
+                )
+            stderr_handler.addFilter(filter_)
+        
+        # Add to root logger
+        logging.getLogger().addHandler(stderr_handler)
+        
+    def add_file_handler():
+        # Create file handler with detailed format
+        file_handler = _CompressedRotatingFileHandler('pypi_to_0install.log', max_bytes=10**10)
+        file_handler.setFormatter(logging.Formatter('{levelname[0]} {asctime}: {message}', style='{'))
+        
+        # Log all debug excluding most of the feed_logger
+        file_handler.setLevel(logging.DEBUG)
+        def filter_(record):
+            return (
+                record.name != context.feed_logger.name or
+                record.levelno >= logging.ERROR or
+                record.msg.startswith('Updating ')
+            )
+        file_handler.addFilter(filter_)
+        
+        # Add to root logger
+        logging.getLogger().addHandler(file_handler)
+        
+    reset_logging()
+    set_log_levels()
+    add_stderr_handler()
+    add_file_handler()
 
-def _reset_logging():
-    # Note: zeroinstall calls logging.basicConfig when imported, naughty naughty
-    root_logger = logging.getLogger()
-    while root_logger.handlers:
-        root_logger.removeHandler(root_logger.handlers[-1])
-    
-def _set_log_levels(context):
-    # Filter out messages that no handler wants
-    logging.getLogger().setLevel(logging.INFO)
-    logging.getLogger('pypi_to_0install').setLevel(logging.DEBUG)
-    context.feed_logger.setLevel(logging.DEBUG)
-    
-def _add_stderr_handler(context):
-    # Create stderr handler with terse format
-    stderr_handler = logging.StreamHandler()
-    stderr_handler.setFormatter(logging.Formatter('{levelname[0]}: {message}', style='{'))
-    
-    # Log all info excluding most of the feed_logger unless it's an error
-    stderr_handler.setLevel(logging.INFO)
-    def filter_(record):
-        return (
-            record.name != context.feed_logger.name or
-            record.levelno >= logging.ERROR or
-            record.msg.startswith('Updating ')
-        )
-    stderr_handler.addFilter(filter_)
-    
-    # Add to root logger
-    logging.getLogger().addHandler(stderr_handler)
-    
-def _add_file_handler(context):
-    # Create file handler with detailed format
-    file_handler = _CompressedRotatingFileHandler('pypi_to_0install.log', max_bytes=10**10)
-    file_handler.setFormatter(logging.Formatter('{levelname[0]} {asctime}: {message}', style='{'))
-    
-    # Log all debug excluding the feed_logger unless it's an error
-    file_handler.setLevel(logging.DEBUG)
-    def filter_(record):
-        return (
-            record.name != context.feed_logger.name or
-            record.levelno >= logging.ERROR
-        )
-    file_handler.addFilter(filter_)
-    
-    # Add to root logger
-    logging.getLogger().addHandler(file_handler)
     
 # Set max_bytes so that up to 150k packages can have a full log without
 # exceeding GitHub's 1GB repository size limit
