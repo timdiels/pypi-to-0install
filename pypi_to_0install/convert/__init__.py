@@ -40,7 +40,10 @@ from chicken_turtle_util import path as path_
 import plumbum as pb
 import xmlrpc
 import time
+import shutil
+from pkg_resources import resource_filename
 
+_setup_py_profile_file = Path(resource_filename(__name__, 'setup_py_firejail.profile')).absolute()
 logger = logging.getLogger(__name__)
 
 def convert(context, package, zi_name, old_feed):
@@ -292,7 +295,7 @@ def _find_egg_info(distribution_directory, output_directory):
         Directory with setup.py of the distribution
     output_directory : Path
         Directory to generate egg-info in if it is missing
-        
+
     Returns
     -------
     Path
@@ -308,14 +311,23 @@ def _find_egg_info(distribution_directory, output_directory):
         if is_valid(egg_info_directory):
             return egg_info_directory
     
-    # Try to generate egg-info
+    # Try to generate egg-info, in sandbox
+    shutil.copytree(str(distribution_directory), str(output_directory / 'dist'))
+    (output_directory / 'out').mkdir()
     for python in ('python2', 'python3'):
         with suppress(pb.ProcessExecutionError, StopIteration):
-            with pb.local.cwd(str(distribution_directory)):
-                pb.local[python]('setup.py', 'egg_info', '--egg-base', str(output_directory), timeout=10)
-                egg_info_directory = next(output_directory.iterdir())
-                if is_valid(egg_info_directory):
-                    return egg_info_directory
+            pb.local['firejail'](
+                '--shell=/bin/sh',
+                '--private={}'.format(output_directory),
+                '--profile={}'.format(_setup_py_profile_file),
+                '--', 'sh', '-c',
+                'cd dist && {} setup.py egg_info --egg-base ../out'
+                .format(python),
+                timeout=10
+            )
+            egg_info_directory = next((output_directory / 'out').iterdir())
+            if is_valid(egg_info_directory):
+                return egg_info_directory
     
     # Failed to get valid egg-info
     raise _InvalidDistribution('No valid *.egg-info directory and setup.py egg_info failed or timed out')
