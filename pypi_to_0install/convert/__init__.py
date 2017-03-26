@@ -270,13 +270,17 @@ def _find_distribution_directory(unpack_directory):
     '''
     Find the directory with setup.py
     '''
-    if (unpack_directory / 'setup.py').exists():
-        return unpack_directory  # tar bomb
-    else:
-        distribution_directory = next(unpack_directory.iterdir())
+    children = list(unpack_directory.iterdir())
+    if len(children) == 1:
+        distribution_directory = children[0]
         if (distribution_directory / 'setup.py').exists():
             return distribution_directory
-    raise _InvalidDistribution('Could not find setup.py')
+        else:
+            raise _InvalidDistribution('Could not find setup.py')
+    elif children:
+        raise _InvalidDistribution('sdist is a tar bomb. These are unsupported')
+    else:
+        raise _InvalidDistribution('sdist is empty')
         
 def _find_egg_info(distribution_directory, output_directory):
     '''
