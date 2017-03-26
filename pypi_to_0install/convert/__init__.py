@@ -38,6 +38,8 @@ from zeroinstall.zerostore import manifest
 import hashlib
 from chicken_turtle_util import path as path_
 import plumbum as pb
+import xmlrpc
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -76,14 +78,14 @@ def convert(context, package, zi_name, old_feed):
     # latest version
     py_versions = [pair[0] for pair in versions]
     max_version = max(py_versions, key=parse_version)
-    release_data = context.pypi.release_data(package.name, max_version)
+    release_data = _retry_pypi(context, lambda: context.pypi.release_data(package.name, max_version))
     release_data['version'] = max_version
     release_data = {k:v for k, v in release_data.items() if v is not None and v != ''}
     feed = _convert_general(context, package.name, zi_name, release_data)
     
     # Add <implementation>s to feed
     for py_version, zi_version in versions:
-        for release_url in context.pypi.release_urls(package.name, py_version):
+        for release_url in _retry_pypi(context, lambda: context.pypi.release_urls(package.name, py_version)):
             if release_url['url'] in package.blacklisted_distributions:
                 continue
             try:
@@ -110,6 +112,26 @@ def convert(context, package, zi_name, old_feed):
         raise NoValidRelease()
     
     return feed, finished
+
+def _retry_pypi(context, call):
+    '''
+    Make pypi xmlrpc request, backoff if it times out, then retry until it succeeds
+    '''
+    for _ in range(5):
+        try:
+            return call()
+        except xmlrpc.client.Fault as ex:
+            if 'timeout' in str(ex).lower():
+                context.feed_logger.warning(
+                    'PyPI request timed out, this worker will back off for 5 minutes. '
+                    'We may be throttled, consider using less workers to put less load on PyPI'
+                )
+                logger.exception(ex) #TODO
+                time.sleep(5*60)
+    raise PyPITimeout('5 consecutive PyPI requests (on this worker) timed out with 5 minutes between each request')
+
+class PyPITimeout(Exception):
+    pass
 
 class NoValidRelease(Exception):
     '''
