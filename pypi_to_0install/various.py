@@ -64,3 +64,10 @@ def atomic_write(destination, mode='w+b'):  #TODO move to CTU project
         f.close()
         Path(f.name).unlink()
         raise
+
+def print_memory_usage():
+    '''
+    Print memory usage for debugging
+    '''
+    from pympler import muppy, summary
+    summary.print_(summary.summarize(muppy.get_objects()))
