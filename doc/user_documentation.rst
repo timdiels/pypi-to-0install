@@ -36,11 +36,24 @@ Grsecurity for additional security.
 
 Running
 -------
+cgroups are required to prevent a malicious setup.py from hogging resources.
+PyPI to 0install executes the following commands to set up cgroups, unless the
+required directories already exist::
+
+    sudo mkdir /sys/fs/cgroup/memory/pypi_to_0install
+    sudo chown $USER /sys/fs/cgroup/memory/pypi_to_0install
+    sudo mkdir /sys/fs/cgroup/blkio/pypi_to_0install
+    sudo chown $USER /sys/fs/cgroup/blkio/pypi_to_0install
+
+Either ensure the above cgroups exist or give the required sudo permissions to
+the user running PyPI to 0install.
+
 To run::
 
+ 
     . $repo_root/venv/bin/activate
     export PYTHONPATH="$repo_root"
     python3 $repo_root/pypi_to_0install/main.py
-    
+   
 .. _install zero install: http://0install.net/injector.html
 .. _install firejail: https://firejail.wordpress.com/download-2/

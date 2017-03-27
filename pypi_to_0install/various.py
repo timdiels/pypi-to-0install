@@ -34,6 +34,12 @@ zi = ElementMaker(namespace=zi_namespaces[None], nsmap=zi_namespaces)
 
 ServerProxy = partial(ServerProxy, use_datetime=True)
 feeds_directory = Path('feeds').absolute()
+_cgroup_root = Path('/sys/fs/cgroup')
+cgroup_subsystems = ('memory', 'blkio')  # the cgroup subsystems we use
+cgroup_subsystems = {
+    subsystem: _cgroup_root / subsystem / 'pypi_to_0install'
+    for subsystem in cgroup_subsystems
+} 
 
 def canonical_name(pypi_name):
     '''

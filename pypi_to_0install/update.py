@@ -15,7 +15,10 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
-from pypi_to_0install.various import Package, atomic_write, ServerProxy, sign_feed, feeds_directory
+from pypi_to_0install.various import (
+    Package, atomic_write, ServerProxy, sign_feed,
+    feeds_directory, cgroup_subsystems
+)
 from pypi_to_0install import worker
 from tempfile import NamedTemporaryFile
 from textwrap import dedent, indent
@@ -32,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 def update(context, worker_count):
     _check_gpg_signing()
+    _create_cgroups()
     
     # Load state
     os.makedirs(str(feeds_directory), exist_ok=True)
@@ -132,6 +136,16 @@ def _check_gpg_signing():
             + indent(shell, '  ')
         )
         sys.exit(1)
+        
+def _create_cgroups():
+    sudo = pb.local['sudo']
+    user = pb.local.env['USER']
+    for cgroup in cgroup_subsystems.values():
+        if not cgroup.exists():
+            sudo('mkdir', str(cgroup))
+        if not os.access(str(cgroup), os.W_OK):
+            # Insufficient permissions, set owner to current user
+            sudo('chown', user, str(cgroup))
 
 @attr.s(cmp=False, hash=False)
 class _State(object):

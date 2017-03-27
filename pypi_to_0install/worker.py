@@ -19,12 +19,16 @@
 Entry point of a feed update worker
 '''
 
-from pypi_to_0install.various import atomic_write, zi, canonical_name, ServerProxy, sign_feed, feeds_directory
+from pypi_to_0install.various import (
+    atomic_write, zi, canonical_name, ServerProxy, sign_feed,
+    feeds_directory, cgroup_subsystems
+)
 from pypi_to_0install.convert import convert, NoValidRelease
 from pypi_to_0install.logging import configure_feed_logger, feed_logger
 from lxml import etree
 import contextlib
 import attr
+import os
 
 @attr.s(frozen=True, slots=True, cmp=False, hash=False)
 class WorkerContext(object):
@@ -72,7 +76,18 @@ class WorkerContext(object):
         str
         '''
         return '{}/pypi_to_0install/{}.xml'.format(self.base_uri, name)
-
+    
+    def cgroup(self, subsystem):
+        '''
+        Path to setup.py cgroup for this worker for given subsystem
+        
+        Parameters
+        ----------
+        subsystem : str
+            E.g. 'memory' or 'blkio'
+        '''
+        return cgroup_subsystems[subsystem] / str(os.getpid())
+    
 def initialize(pypi_uri, base_uri, pypi_mirror):
     '''
     Called to initialize the worker process
@@ -92,6 +107,20 @@ def initialize(pypi_uri, base_uri, pypi_mirror):
         base_uri,
         pypi_mirror
     )
+    
+    # Configure cgroup for executing setup.py
+    for subsystem in cgroup_subsystems:
+        cgroup = _context.cgroup(subsystem)
+        cgroup.mkdir()  # Create group
+        if subsystem == 'memory':
+            # Limit to 10MB of memory+swap usage
+            (cgroup / 'memory.limit_in_bytes').write_text('10M', encoding='ascii')
+            (cgroup / 'memory.memsw.limit_in_bytes').write_text('10M', encoding='ascii')
+        elif subsystem == 'blkio':
+            # give minimal priority for disk IO
+            (cgroup / 'blkio.weight').write_text('100', encoding='ascii')
+        else:
+            assert False, 'unused subsystem: {}'.format(subsystem)
 
 def update_feed(package):
     '''

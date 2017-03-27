@@ -28,7 +28,7 @@ from tempfile import TemporaryDirectory, NamedTemporaryFile
 from urllib.request import urlretrieve
 import urllib.error
 import pkginfo
-from pypi_to_0install.various import zi, zi_namespaces, canonical_name
+from pypi_to_0install.various import zi, zi_namespaces, canonical_name, cgroup_subsystems
 from ._version import parse_version, InvalidVersion
 from ._specifiers import convert_specifiers
 import logging
@@ -44,6 +44,7 @@ import shutil
 from pkg_resources import resource_filename
 
 _setup_py_profile_file = Path(resource_filename(__name__, 'setup_py_firejail.profile')).absolute()
+_setup_py_firejail_sh = Path(resource_filename(__name__, 'setup_py_firejail.sh')).absolute()
 logger = logging.getLogger(__name__)
 
 def convert(context, package, zi_name, old_feed):
@@ -217,7 +218,7 @@ def _convert_distribution(context, zi_version, feed, old_feed, release_data, rel
         context.feed_logger.debug('Generating <implementation>')
         
         with TemporaryDirectory() as temporary_directory:
-            egg_info_directory = _find_egg_info(distribution_directory, Path(temporary_directory))
+            egg_info_directory = _find_egg_info(context, distribution_directory, Path(temporary_directory))
             package = pkginfo.UnpackedSDist(str(egg_info_directory))
             requirements = _convert_dependencies(context, egg_info_directory)
         
@@ -285,7 +286,7 @@ def _find_distribution_directory(unpack_directory):
     else:
         raise _InvalidDistribution('sdist is empty')
         
-def _find_egg_info(distribution_directory, output_directory):
+def _find_egg_info(context, distribution_directory, output_directory):
     '''
     Get *.egg-info directory
     
@@ -304,33 +305,48 @@ def _find_egg_info(distribution_directory, output_directory):
     def is_valid(egg_info_directory):
         return (egg_info_directory / 'PKG-INFO').exists()
     
-    # Try to find egg-info
-    egg_info_directories = tuple(distribution_directory.glob('*.egg-info'))
-    if len(egg_info_directories) == 1:
-        egg_info_directory = egg_info_directories[0]
-        if is_valid(egg_info_directory):
-            return egg_info_directory
-    
-    # Try to generate egg-info, in sandbox
-    shutil.copytree(str(distribution_directory), str(output_directory / 'dist'))
-    (output_directory / 'out').mkdir()
-    for python in ('python2', 'python3'):
-        with suppress(pb.ProcessExecutionError, StopIteration):
-            pb.local['firejail'](
-                '--shell=/bin/sh',
-                '--private={}'.format(output_directory),
-                '--profile={}'.format(_setup_py_profile_file),
-                '--', 'sh', '-c',
-                'cd dist && {} setup.py egg_info --egg-base ../out'
-                .format(python),
-                timeout=10
-            )
-            egg_info_directory = next((output_directory / 'out').iterdir())
+    def try_find_egg_info():
+        egg_info_directories = tuple(distribution_directory.glob('*.egg-info'))
+        if len(egg_info_directories) == 1:
+            egg_info_directory = egg_info_directories[0]
             if is_valid(egg_info_directory):
                 return egg_info_directory
+        return None
+            
+    def try_generate_egg_info():
+        # Prepare output_directory
+        shutil.copytree(str(distribution_directory), str(output_directory / 'dist'))
+        (output_directory / 'out').mkdir()
+        
+        # Run setup.py egg_info in sandbox, in mem limiting cgroup, with disk quota
+        tasks_files = [context.cgroup(subsystem) / 'tasks' for subsystem in cgroup_subsystems]
+        for python in ('python2', 'python3'):
+            with suppress(pb.ProcessExecutionError, StopIteration):
+                pb.local['sh'](
+                    _setup_py_firejail_sh,
+                    output_directory,
+                    _setup_py_profile_file,
+                    python,
+                    *tasks_files,
+                    timeout=10
+                )
+                
+                # Find egg-info
+                egg_info_directory = next((output_directory / 'out').iterdir())
+                if is_valid(egg_info_directory):
+                    return egg_info_directory
+        
+        # Failed to generate egg-info
+        return None
     
-    # Failed to get valid egg-info
-    raise _InvalidDistribution('No valid *.egg-info directory and setup.py egg_info failed or timed out')
+    egg_info_directory = (
+        try_find_egg_info() or
+        try_generate_egg_info()
+    )
+    if not egg_info_directory:
+        raise _InvalidDistribution('No valid *.egg-info directory and setup.py egg_info failed or timed out')
+    return egg_info_directory
+
     
 def _stability(pypi_version):
     version = parse_version(pypi_version)
