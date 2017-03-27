@@ -21,7 +21,7 @@ Entry point of a feed update worker
 
 from pypi_to_0install.various import atomic_write, zi, canonical_name, ServerProxy, sign_feed, feeds_directory
 from pypi_to_0install.convert import convert, NoValidRelease
-from pypi_to_0install.logging import feed_log_handler, feed_logger
+from pypi_to_0install.logging import configure_feed_logger, feed_logger
 from lxml import etree
 import contextlib
 import attr
@@ -129,8 +129,8 @@ def update_feed(package):
 def _update_feed(context, package, exit_stack):
     zi_name = canonical_name(package.name)
     feed_file = context.feed_file(zi_name)
-    exit_stack.enter_context(feed_log_handler(context, feed_file.with_suffix('.log')))
-    context.feed_logger.info('Updating {!r}'.format(package.name))
+    exit_stack.enter_context(configure_feed_logger(zi_name, feed_file.with_suffix('.log')))
+    context.feed_logger.info('Updating (PyPI name: {!r})'.format(package.name))
     
     # Read ZI feed file corresponding to the PyPI package, if any 
     if feed_file.exists():

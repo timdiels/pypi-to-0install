@@ -41,17 +41,28 @@ def configure(context, verbosity):
         logging.getLogger('pypi_to_0install').setLevel(logging.DEBUG)
         feed_logger.setLevel(logging.DEBUG)
         
+    def ensure_zi_name_prefix_filter(record):
+        # Ensure each record has zi_name_prefix
+        if hasattr(record, 'zi_name'):
+            record.zi_name_prefix = record.zi_name + ': '
+        else:
+            record.zi_name_prefix = ''
+        return True
+        
     def add_stderr_handler():
         if not verbosity:
             return
         
         # Create stderr handler with terse format
         stderr_handler = logging.StreamHandler()
-        stderr_handler.setFormatter(logging.Formatter('{levelname[0]}: {message}', style='{'))
+        stderr_handler.setFormatter(logging.Formatter('{levelname[0]}: {zi_name_prefix}{message}', style='{'))
         
-        # Log all info
+        # Exclude <INFO
         stderr_handler.setLevel(logging.INFO)
+        
+        #
         if verbosity == 1:
+            # Exclude feed_logger<ERROR, except the Updating msg
             def filter_(record):
                 return (
                     record.name != feed_logger.name or
@@ -60,23 +71,22 @@ def configure(context, verbosity):
                 )
             stderr_handler.addFilter(filter_)
         
+        #
+        stderr_handler.addFilter(ensure_zi_name_prefix_filter)
+            
         # Add to root logger
         logging.getLogger().addHandler(stderr_handler)
         
     def add_file_handler():
         # Create file handler with detailed format
         file_handler = _CompressedRotatingFileHandler('pypi_to_0install.log', max_bytes=10**10)
-        file_handler.setFormatter(logging.Formatter('{levelname[0]} {asctime}: {message}', style='{'))
+        file_handler.setFormatter(logging.Formatter('{levelname[0]} {asctime}: {zi_name_prefix}{message}', style='{'))
         
-        # Log all debug excluding most of the feed_logger
-        file_handler.setLevel(logging.DEBUG)
-        def filter_(record):
-            return (
-                record.name != feed_logger.name or
-                record.levelno >= logging.ERROR or
-                record.msg.startswith('Updating ')
-            )
-        file_handler.addFilter(filter_)
+        # Log all info, even from feed_logger
+        file_handler.setLevel(logging.INFO)
+        
+        #
+        file_handler.addFilter(ensure_zi_name_prefix_filter)
         
         # Add to root logger
         logging.getLogger().addHandler(file_handler)
@@ -91,16 +101,29 @@ def configure(context, verbosity):
 _feed_log_max_bytes = 2**30 // 150e3
 
 @contextmanager
-def feed_log_handler(context, log_file):
+def configure_feed_logger(zi_name, log_file):
+    '''
+    Temporarily configure feed_logger for feed 
+    '''
+    # File handler
     file_handler = _CompressedRotatingFileHandler(str(log_file), _feed_log_max_bytes)
     with contextlib.closing(file_handler):
         file_handler.setLevel(logging.INFO)
         file_handler.setFormatter(logging.Formatter('{levelname[0]} {asctime}: {message}', style='{'))
-        context.feed_logger.addHandler(file_handler)
+        
+        # Add feed name to each log record by filter
+        def filter_(record):
+            record.zi_name = zi_name
+            return True
+        
+        # Attach to logger
+        feed_logger.addHandler(file_handler)
+        feed_logger.addFilter(filter_)
         try:
             yield
         finally:
-            context.feed_logger.removeHandler(file_handler)
+            feed_logger.removeHandler(file_handler)
+            feed_logger.removeFilter(filter_)
             
 def _CompressedRotatingFileHandler(file_name, max_bytes):
     '''
