@@ -17,6 +17,8 @@
 
 '''
 CLI interface; signals setup
+
+Entry point of the main process
 '''
 
 from pypi_to_0install.update import update

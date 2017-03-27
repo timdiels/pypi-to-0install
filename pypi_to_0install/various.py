@@ -20,7 +20,10 @@ import attr
 from lxml.builder import ElementMaker
 from tempfile import NamedTemporaryFile
 from contextlib import contextmanager
+from xmlrpc.client import ServerProxy
+from functools import partial
 from pathlib import Path
+import plumbum as pb
 import shutil
 
 zi_namespaces = {
@@ -28,6 +31,9 @@ zi_namespaces = {
     'compile': 'http://zero-install.sourceforge.net/2006/namespaces/0compile'
 }
 zi = ElementMaker(namespace=zi_namespaces[None], nsmap=zi_namespaces)
+
+ServerProxy = partial(ServerProxy, use_datetime=True)
+feeds_directory = Path('feeds').absolute()
 
 def canonical_name(pypi_name):
     '''
@@ -71,3 +77,6 @@ def print_memory_usage():
     '''
     from pympler import muppy, summary
     summary.print_(summary.summarize(muppy.get_objects()))
+
+def sign_feed(path):
+    pb.local['0launch']('http://0install.net/2006/interfaces/0publish', '--xmlsign', str(path))

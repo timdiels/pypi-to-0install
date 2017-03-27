@@ -26,6 +26,8 @@ import contextlib
 from pathlib import Path
 import bz2
 
+feed_logger = logging.getLogger(__name__ + ':current_feed')
+
 def configure(context, verbosity):
     def reset_logging():
         # Note: zeroinstall calls logging.basicConfig when imported, naughty naughty
@@ -37,7 +39,7 @@ def configure(context, verbosity):
         # Filter out messages that no handler wants
         logging.getLogger().setLevel(logging.INFO)
         logging.getLogger('pypi_to_0install').setLevel(logging.DEBUG)
-        context.feed_logger.setLevel(logging.DEBUG)
+        feed_logger.setLevel(logging.DEBUG)
         
     def add_stderr_handler():
         if not verbosity:
@@ -52,7 +54,7 @@ def configure(context, verbosity):
         if verbosity == 1:
             def filter_(record):
                 return (
-                    record.name != context.feed_logger.name or
+                    record.name != feed_logger.name or
                     record.levelno >= logging.ERROR or
                     record.msg.startswith('Updating ')
                 )
@@ -70,7 +72,7 @@ def configure(context, verbosity):
         file_handler.setLevel(logging.DEBUG)
         def filter_(record):
             return (
-                record.name != context.feed_logger.name or
+                record.name != feed_logger.name or
                 record.levelno >= logging.ERROR or
                 record.msg.startswith('Updating ')
             )
@@ -84,7 +86,6 @@ def configure(context, verbosity):
     add_stderr_handler()
     add_file_handler()
 
-    
 # Set max_bytes so that up to 150k packages can have a full log without
 # exceeding GitHub's 1GB repository size limit
 _feed_log_max_bytes = 2**30 // 150e3
