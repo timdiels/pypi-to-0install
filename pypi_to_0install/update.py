@@ -33,7 +33,7 @@ import os
 logger = logging.getLogger(__name__)
 
 def update(context, worker_count):
-    check_gpg_signing()
+    _check_gpg_signing()
     
     # Load state
     os.makedirs(str(context.feeds_directory), exist_ok=True)
@@ -97,7 +97,7 @@ def update(context, worker_count):
             logger.error('There were errors, programmer required, see exception(s) in log')
             sys.exit(1)
             
-def check_gpg_signing():
+def _check_gpg_signing():
     # Check GPG signing works
     try:
         # Sign a dummy feed
