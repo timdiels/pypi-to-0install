@@ -86,3 +86,6 @@ def print_memory_usage():
 
 def sign_feed(path):
     pb.local['0launch']('http://0install.net/2006/interfaces/0publish', '--xmlsign', str(path))
+    
+class PyPITimeout(Exception):
+    pass

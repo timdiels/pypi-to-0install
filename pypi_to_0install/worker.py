@@ -21,7 +21,7 @@ Entry point of a feed update worker
 
 from pypi_to_0install.various import (
     atomic_write, zi, canonical_name, ServerProxy, sign_feed,
-    feeds_directory, cgroup_subsystems
+    feeds_directory, cgroup_subsystems, PyPITimeout
 )
 from pypi_to_0install.convert import convert, NoValidRelease
 from pypi_to_0install.logging import configure_feed_logger, feed_logger
@@ -151,6 +151,8 @@ def update_feed(package):
             else:
                 _context.feed_logger.info('Fully updated')
             return package, finished
+        except PyPITimeout as ex:
+            return ex, False
         except Exception as ex:
             _context.feed_logger.exception('Unhandled error occurred')
             return ex, False

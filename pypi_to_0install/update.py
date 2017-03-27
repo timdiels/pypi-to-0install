@@ -17,7 +17,7 @@
 
 from pypi_to_0install.various import (
     Package, atomic_write, ServerProxy, sign_feed,
-    feeds_directory, cgroup_subsystems
+    feeds_directory, cgroup_subsystems, PyPITimeout
 )
 from pypi_to_0install import worker
 from tempfile import NamedTemporaryFile
@@ -82,6 +82,10 @@ def update(context, worker_count):
             for package, finished in results:
                 # If error, note and continue
                 if isinstance(package, Exception):
+                    ex = package
+                    if isinstance(ex, PyPITimeout):
+                        logger.error(ex.args[0] + '. PyPI may be having issues or may be blocking us. Giving up')
+                        sys.exit(1)
                     errored = True
                     continue
                     

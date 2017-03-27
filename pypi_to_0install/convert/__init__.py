@@ -28,7 +28,7 @@ from tempfile import TemporaryDirectory, NamedTemporaryFile
 from urllib.request import urlretrieve
 import urllib.error
 import pkginfo
-from pypi_to_0install.various import zi, zi_namespaces, canonical_name, cgroup_subsystems
+from pypi_to_0install.various import zi, zi_namespaces, canonical_name, cgroup_subsystems, PyPITimeout
 from ._version import parse_version, InvalidVersion
 from ._specifiers import convert_specifiers
 import logging
@@ -133,9 +133,6 @@ def _retry_pypi(context, call):
                 logger.exception(ex) #TODO
                 time.sleep(5*60)
     raise PyPITimeout('5 consecutive PyPI requests (on this worker) timed out with 5 minutes between each request')
-
-class PyPITimeout(Exception):
-    pass
 
 class NoValidRelease(Exception):
     '''
