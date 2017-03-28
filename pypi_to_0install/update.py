@@ -16,14 +16,13 @@
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
 from pypi_to_0install.various import (
-    Package, atomic_write, ServerProxy, sign_feed,
-    feeds_directory, cgroup_subsystems, PyPITimeout
+    Package, atomic_write, ServerProxy, sign_feed, cgroup_subsystems,
+    feeds_directory
 )
-from pypi_to_0install import worker
+from pypi_to_0install.pool import parallel_update
 from tempfile import NamedTemporaryFile
 from textwrap import dedent, indent
 from pathlib import Path
-from multiprocessing.pool import Pool
 import plumbum as pb
 import logging
 import pickle
@@ -61,49 +60,16 @@ def update(context, worker_count):
                 state.changed[pypi_name] = state.packages[pypi_name]
     state.last_serial = newest_serial
     
-    # Return if no changes
-    if not state.changed:
-        logger.info('Nothing changed')
-        state.save()
-        return
-    
-    # Update all
-    errored = False
-    try:
-        # Update/create feeds of changed packages, with worker processes
-        pool = Pool(
-            worker_count,
-            initializer=worker.initialize,
-            initargs=(context.pypi_uri, context.base_uri, context.pypi_mirror)
-        )
-        with pool:  # calls pool.terminate on exit
-            logger.debug('Updating feeds with {} workers'.format(worker_count))
-            results = pool.imap_unordered(worker.update_feed, list(state.changed.values()), chunksize=1)
-            for package, finished in results:
-                # If error, note and continue
-                if isinstance(package, Exception):
-                    ex = package
-                    if isinstance(ex, PyPITimeout):
-                        logger.error(ex.args[0] + '. PyPI may be having issues or may be blocking us. Giving up')
-                        sys.exit(1)
-                    errored = True
-                    continue
-                    
-                # Update packages with changed package (it's a different
-                # instance due to crossing process boundaries)
-                state.packages[package.name] = package
-                
-                # Remove from todo list (changed) if finished
-                if finished:
-                    del state.changed[package.name]
-    finally:
-        # Save progress
-        state.save()
+    #
+    with state:  # save on exit
+        # Return if no changes
+        if not state.changed:
+            logger.info('Nothing changed')
+            return
         
-        # Exit non-zero iff errored
-        if errored:
-            logger.error('There were errors, programmer required, see exception(s) in log')
-            sys.exit(1)
+        # Update/create feeds for changed packages, with a pool of worker processes
+        logger.debug('Updating feeds with {} workers'.format(worker_count))
+        parallel_update(context, worker_count, state)
             
 def _check_gpg_signing():
     # Check GPG signing works
@@ -184,6 +150,12 @@ class _State(object):
         with atomic_write(_State._file) as f:
             pickle.dump(self, f)
         logger.info('Saved')
+    
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.save()
     
 def _changed_packages_since(pypi, serial):
     changes = pypi.changelog_since_serial(serial)  # list of five-tuples (name, version, timestamp, action, serial) since given serial

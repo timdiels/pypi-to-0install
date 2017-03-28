@@ -30,13 +30,8 @@ from pathlib import Path
 from lxml import etree
 import plumbum as pb
 import contextlib
-import threading
-import signal
 import attr
-import time
 import os
-
-_cleaned_up = False
 
 @attr.s(frozen=True, slots=True, cmp=False, hash=False)
 class WorkerContext(object):
@@ -97,9 +92,9 @@ class WorkerContext(object):
         '''
         return cgroup_subsystems[subsystem] / str(os.getpid())
     
-def initialize(pypi_uri, base_uri, pypi_mirror):
+def main(pypi_uri, base_uri, pypi_mirror, packages, results):
     '''
-    Called to initialize the worker process
+    Worker process entry point
     
     Parameters
     ----------
@@ -109,29 +104,21 @@ def initialize(pypi_uri, base_uri, pypi_mirror):
         base URI where all files will be hosted
     pypi_mirror : str
         uri of PyPI mirror to use for downloads, if any
+    packages : mp.SimpleQueue
+        packages to update
+    results : mp.SimpleQueue
+        queue to place results on
     '''
-    global _context
-    exit_stack = contextlib.ExitStack()
+    with contextlib.ExitStack() as exit_stack:
+        context = initialize(exit_stack, pypi_uri, base_uri, pypi_mirror)
+        while True:
+            package = packages.get()
+            results.put(update_feed(context, package))
     
-    # Ignore SIGINT, SIGHUP
-    for signal_ in (signal.SIGINT, signal.SIGHUP):
-        signal.signal(signal_, signal.SIG_IGN)
-        
-    # cleanup func
-    cleanup_lock = threading.Lock()
-    def cleanup():
-        with cleanup_lock:
-            print('cleaning')
-            exit_stack.close()  # idempotent
-    
-    # On SIGTERM, cleanup and die
-    def sigterm(signal_, frame):
-        #TODO if main code not nicely exited, send SIGINT to self to trigger KeyboardInterrupt, but then don't ignore SIGINT above
-        print('sigterm')
-        cleanup()
-        os._exit(1)  # Note: fork children should use this instead of sys.exit
-    signal.signal(signal.SIGTERM, sigterm)
-    
+def initialize(exit_stack, pypi_uri, base_uri, pypi_mirror):
+    '''
+    Called to initialize the worker process
+    '''
     # Create temporary directory with disk quota of 96MB
     # I.e. 100MB - 4MB overhead from ext2
     temporary_directory = Path(exit_stack.enter_context(TemporaryDirectory()))
@@ -145,7 +132,7 @@ def initialize(pypi_uri, base_uri, pypi_mirror):
     pb.local['sudo']('chown', pb.local.env['USER'], mount_point)
     
     # Create context
-    _context = WorkerContext(
+    context = WorkerContext(
         ServerProxy(pypi_uri),
         base_uri,
         pypi_mirror,
@@ -154,7 +141,7 @@ def initialize(pypi_uri, base_uri, pypi_mirror):
     
     # Configure cgroup for executing setup.py
     for subsystem in cgroup_subsystems:
-        cgroup = _context.cgroup(subsystem)
+        cgroup = context.cgroup(subsystem)
         cgroup.mkdir()  # Create group
         if subsystem == 'memory':
             # Limit to 10MB of memory+swap usage
@@ -166,19 +153,16 @@ def initialize(pypi_uri, base_uri, pypi_mirror):
         else:
             assert False, 'unused subsystem: {}'.format(subsystem)
         exit_stack.callback(cgroup.rmdir)
+        
+    return context
     
-    # When cleanup starts, prevent worker from starting new work
-    def set_cleaned_up():
-        global _cleaned_up
-        _cleaned_up = True
-    exit_stack.callback(set_cleaned_up)
-
-def update_feed(package):
+def update_feed(context, package):
     '''
     Update feed in worker process
     
     Parameters
     ----------
+    context : WorkerContext
     package : Package
         The package whose feed to update
     
@@ -190,26 +174,23 @@ def update_feed(package):
     finished : bool
         See convert's return
     '''
-    global _context
-    
-    # If process has been cleaned up, wait to be killed
-    if _cleaned_up:
-        time.sleep(30758400)  # 1 year
-        
     # Logging and exception handling that wraps _update_feed which does the
     # actual updating
     with contextlib.ExitStack() as exit_stack:  # removes feed log handler
         try:
-            package, finished = _update_feed(_context, package, exit_stack)
+            package, finished = _update_feed(context, package, exit_stack)
             if not finished:
-                _context.feed_logger.warning('Partially updated, will retry failed parts on next run')
+                context.feed_logger.warning('Partially updated, will retry failed parts on next run')
             else:
-                _context.feed_logger.info('Fully updated')
+                context.feed_logger.info('Fully updated')
             return package, finished
+        except SystemExit:
+            # Assume these are no accident and let it kill the process
+            raise
         except PyPITimeout as ex:
             return ex, False
         except Exception as ex:
-            _context.feed_logger.exception('Unhandled error occurred')
+            context.feed_logger.exception('Unhandled error occurred')
             return ex, False
             
 def _update_feed(context, package, exit_stack):

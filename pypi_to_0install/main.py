@@ -25,6 +25,7 @@ from pypi_to_0install.update import update
 from pypi_to_0install.context import Context
 from pypi_to_0install import logging as logging_
 from pathlib import Path
+import multiprocessing as mp
 import logging
 import signal
 import click
@@ -78,6 +79,7 @@ def main(workers, pypi_mirror, verbosity):
     )
     
     logging_.configure(context, verbosity)
+    mp.set_start_method('fork')
     
     # Clean exit on cancellation signals
     def cancel(signal_, frame):
