@@ -214,7 +214,7 @@ def _convert_distribution(context, zi_version, feed, old_feed, release_data, rel
         distribution_directory = _find_distribution_directory(unpack_directory)
         context.feed_logger.debug('Generating <implementation>')
         
-        with TemporaryDirectory() as temporary_directory:
+        with TemporaryDirectory(dir=str(context.quota_directory)) as temporary_directory:
             egg_info_directory = _find_egg_info(context, distribution_directory, Path(temporary_directory))
             package = pkginfo.UnpackedSDist(str(egg_info_directory))
             requirements = _convert_dependencies(context, egg_info_directory)

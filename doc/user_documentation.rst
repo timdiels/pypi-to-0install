@@ -34,6 +34,12 @@ this to work properly, ``CONFIG_USER_NS=y`` must be set in the kernel config
 (The linux-grsec Arch Linux package already sets this). Consider using
 Grsecurity for additional security.
 
+PyPI to 0install requires at least the following sudo permissions (also see the
+section below on cgroups)::
+
+    sudo mount -t ext4 $file $mountpoint
+    sudo umount $mountpoint
+
 Running
 -------
 cgroups are required to prevent a malicious setup.py from hogging resources.
@@ -50,10 +56,9 @@ the user running PyPI to 0install.
 
 To run::
 
- 
     . $repo_root/venv/bin/activate
     export PYTHONPATH="$repo_root"
     python3 $repo_root/pypi_to_0install/main.py
-   
+
 .. _install zero install: http://0install.net/injector.html
 .. _install firejail: https://firejail.wordpress.com/download-2/

@@ -25,10 +25,18 @@ from pypi_to_0install.various import (
 )
 from pypi_to_0install.convert import convert, NoValidRelease
 from pypi_to_0install.logging import configure_feed_logger, feed_logger
+from tempfile import TemporaryDirectory
+from pathlib import Path
 from lxml import etree
+import plumbum as pb
 import contextlib
+import threading
+import signal
 import attr
+import time
 import os
+
+_cleaned_up = False
 
 @attr.s(frozen=True, slots=True, cmp=False, hash=False)
 class WorkerContext(object):
@@ -36,6 +44,7 @@ class WorkerContext(object):
     pypi = attr.ib()  # ServerProxy of Python index XMLRPC interface
     base_uri = attr.ib()  # base URI where all files will be hosted
     pypi_mirror = attr.ib()  # uri of PyPI mirror to use for downloads, if any
+    quota_directory = attr.ib()  # directory Path with max size quota
     
     @property
     def feed_logger(self):
@@ -102,10 +111,45 @@ def initialize(pypi_uri, base_uri, pypi_mirror):
         uri of PyPI mirror to use for downloads, if any
     '''
     global _context
+    exit_stack = contextlib.ExitStack()
+    
+    # Ignore SIGINT, SIGHUP
+    for signal_ in (signal.SIGINT, signal.SIGHUP):
+        signal.signal(signal_, signal.SIG_IGN)
+        
+    # cleanup func
+    cleanup_lock = threading.Lock()
+    def cleanup():
+        with cleanup_lock:
+            print('cleaning')
+            exit_stack.close()  # idempotent
+    
+    # On SIGTERM, cleanup and die
+    def sigterm(signal_, frame):
+        #TODO if main code not nicely exited, send SIGINT to self to trigger KeyboardInterrupt, but then don't ignore SIGINT above
+        print('sigterm')
+        cleanup()
+        os._exit(1)  # Note: fork children should use this instead of sys.exit
+    signal.signal(signal.SIGTERM, sigterm)
+    
+    # Create temporary directory with disk quota of 96MB
+    # I.e. 100MB - 4MB overhead from ext2
+    temporary_directory = Path(exit_stack.enter_context(TemporaryDirectory()))
+    storage_file = temporary_directory / 'storage'
+    pb.local['truncate']('-s', '100m', storage_file)  # Create sparse file
+    pb.local['mkfs']('-t', 'ext2', '-m', 0, storage_file)
+    mount_point = temporary_directory / 'mount_point'
+    mount_point.mkdir()
+    pb.local['sudo']('mount', '-t', 'ext2', storage_file, mount_point)
+    exit_stack.callback(pb.local['sudo'], 'umount', '--force', mount_point)
+    pb.local['sudo']('chown', pb.local.env['USER'], mount_point)
+    
+    # Create context
     _context = WorkerContext(
         ServerProxy(pypi_uri),
         base_uri,
-        pypi_mirror
+        pypi_mirror,
+        mount_point
     )
     
     # Configure cgroup for executing setup.py
@@ -121,6 +165,13 @@ def initialize(pypi_uri, base_uri, pypi_mirror):
             (cgroup / 'blkio.weight').write_text('100', encoding='ascii')
         else:
             assert False, 'unused subsystem: {}'.format(subsystem)
+        exit_stack.callback(cgroup.rmdir)
+    
+    # When cleanup starts, prevent worker from starting new work
+    def set_cleaned_up():
+        global _cleaned_up
+        _cleaned_up = True
+    exit_stack.callback(set_cleaned_up)
 
 def update_feed(package):
     '''
@@ -141,6 +192,10 @@ def update_feed(package):
     '''
     global _context
     
+    # If process has been cleaned up, wait to be killed
+    if _cleaned_up:
+        time.sleep(30758400)  # 1 year
+        
     # Logging and exception handling that wraps _update_feed which does the
     # actual updating
     with contextlib.ExitStack() as exit_stack:  # removes feed log handler
