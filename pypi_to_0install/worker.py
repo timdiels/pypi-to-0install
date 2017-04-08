@@ -21,15 +21,17 @@ Entry point of a feed update worker
 
 from pypi_to_0install.various import (
     atomic_write, zi, canonical_name, ServerProxy, sign_feed,
-    feeds_directory, cgroup_subsystems, PyPITimeout
+    feeds_directory, cgroup_subsystems, PyPITimeout, Cancelled
 )
 from pypi_to_0install.convert import convert, NoValidRelease
 from pypi_to_0install.logging import configure_feed_logger, feed_logger
 from tempfile import TemporaryDirectory
+from contextlib import suppress
 from pathlib import Path
 from lxml import etree
 import plumbum as pb
 import contextlib
+import psutil
 import attr
 import os
 
@@ -110,12 +112,35 @@ def main(pypi_uri, base_uri, pypi_mirror, packages, results):
         queue to place results on
     '''
     with contextlib.ExitStack() as exit_stack:
-        context = initialize(exit_stack, pypi_uri, base_uri, pypi_mirror)
-        while True:
-            package = packages.get()
-            results.put(update_feed(context, package))
+        try:
+            context = _initialize(exit_stack, pypi_uri, base_uri, pypi_mirror)
+            while True:
+                package = packages.get()
+                results.put(_update_feed(context, package))
+        except Cancelled:
+            pass
+        finally:
+            # Kill and wait for subprocesses to die
+            _kill_children()
+            
+def _kill_children():
+    worker = psutil.Process(os.getpid())
+    children = worker.children(recursive=True)
     
-def initialize(exit_stack, pypi_uri, base_uri, pypi_mirror):
+    # SIGTERM children
+    for child in children:
+        with suppress(psutil.NoSuchProcess):
+            child.terminate()
+    
+    # Wait
+    _, live_children = psutil.wait_procs(children, timeout=3)  # Note: parent kills workers after 10 sec, don't dilly dally
+    
+    # SIGKILL
+    for child in live_children:
+        with suppress(psutil.NoSuchProcess):
+            child.kill()
+    
+def _initialize(exit_stack, pypi_uri, base_uri, pypi_mirror):
     '''
     Called to initialize the worker process
     '''
@@ -153,10 +178,13 @@ def initialize(exit_stack, pypi_uri, base_uri, pypi_mirror):
         else:
             assert False, 'unused subsystem: {}'.format(subsystem)
         exit_stack.callback(cgroup.rmdir)
+    def f():
+        (pb.local['/bin/ps']) & pb.FG
+    exit_stack.callback(f)
         
     return context
     
-def update_feed(context, package):
+def _update_feed(context, package):
     '''
     Update feed in worker process
     
@@ -178,14 +206,14 @@ def update_feed(context, package):
     # actual updating
     with contextlib.ExitStack() as exit_stack:  # removes feed log handler
         try:
-            package, finished = _update_feed(context, package, exit_stack)
+            package, finished = __update_feed(context, package, exit_stack)
             if not finished:
                 context.feed_logger.warning('Partially updated, will retry failed parts on next run')
             else:
                 context.feed_logger.info('Fully updated')
             return package, finished
-        except SystemExit:
-            # Assume these are no accident and let it kill the process
+        except Cancelled:
+            # Cancelling is not an error, let it cancel
             raise
         except PyPITimeout as ex:
             return ex, False
@@ -193,7 +221,7 @@ def update_feed(context, package):
             context.feed_logger.exception('Unhandled error occurred')
             return ex, False
             
-def _update_feed(context, package, exit_stack):
+def __update_feed(context, package, exit_stack):
     zi_name = canonical_name(package.name)
     feed_file = context.feed_file(zi_name)
     exit_stack.enter_context(configure_feed_logger(zi_name, feed_file.with_suffix('.log')))

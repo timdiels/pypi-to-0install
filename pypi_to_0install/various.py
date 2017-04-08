@@ -89,3 +89,6 @@ def sign_feed(path):
     
 class PyPITimeout(Exception):
     pass
+
+class Cancelled(Exception):
+    '''When SIGTERM, SIGINT, SIGHUP has been received'''

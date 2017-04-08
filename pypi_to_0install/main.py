@@ -21,6 +21,7 @@ CLI interface; signals setup
 Entry point of the main process
 '''
 
+from pypi_to_0install.various import Cancelled
 from pypi_to_0install.update import update
 from pypi_to_0install.context import Context
 from pypi_to_0install import logging as logging_
@@ -29,7 +30,6 @@ import multiprocessing as mp
 import logging
 import signal
 import click
-import sys
 import os
 import re
 
@@ -83,13 +83,15 @@ def main(workers, pypi_mirror, verbosity):
     
     # Clean exit on cancellation signals
     def cancel(signal_, frame):
-        sys.exit(1)
+        raise Cancelled(signal_)
     for signal_ in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         signal.signal(signal_, cancel)
     
     # Run
     try:
         update(context, workers)
+    except Cancelled:
+        pass
     finally:
         logger.info('Exited cleanly')
 

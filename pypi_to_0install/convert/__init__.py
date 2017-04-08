@@ -15,6 +15,10 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
+from pypi_to_0install.various import (
+    zi, zi_namespaces, canonical_name, cgroup_subsystems, PyPITimeout,
+    Cancelled
+)
 from copy import deepcopy
 from lxml import etree
 from pathlib import Path
@@ -28,7 +32,6 @@ from tempfile import TemporaryDirectory, NamedTemporaryFile
 from urllib.request import urlretrieve
 import urllib.error
 import pkginfo
-from pypi_to_0install.various import zi, zi_namespaces, canonical_name, cgroup_subsystems, PyPITimeout
 from ._version import parse_version, InvalidVersion
 from ._specifiers import convert_specifiers
 import logging
@@ -319,14 +322,21 @@ def _find_egg_info(context, distribution_directory, output_directory):
         tasks_files = [context.cgroup(subsystem) / 'tasks' for subsystem in cgroup_subsystems]
         for python in ('python2', 'python3'):
             with suppress(pb.ProcessExecutionError, StopIteration):
-                pb.local['sh'](
-                    _setup_py_firejail_sh,
-                    output_directory,
-                    _setup_py_profile_file,
-                    python,
-                    *tasks_files,
-                    timeout=10
-                )
+                try:
+                    pb.local['sh'](
+                        _setup_py_firejail_sh,
+                        output_directory,
+                        _setup_py_profile_file,
+                        python,
+                        *tasks_files,
+                        timeout=10
+                    )
+                except Cancelled as ex:
+                    #TODO wait for pb process to die. It seems pb sent it a
+                    #sigterm, not sure whether pb is waiting in separate thread
+                    #to kill it if it takes too long
+                    print(repr(ex))
+                    raise
                 
                 # Find egg-info
                 egg_info_directory = next((output_directory / 'out').iterdir())
