@@ -16,13 +16,10 @@
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
 from pypi_to_0install.various import (
-    Package, atomic_write, ServerProxy, sign_feed,
-    feeds_directory
+    Package, atomic_write, ServerProxy, feeds_directory
 )
 from pypi_to_0install import parallel
 from concurrent.futures import ThreadPoolExecutor
-from tempfile import NamedTemporaryFile
-from textwrap import dedent, indent
 from pathlib import Path
 import plumbum as pb
 import asyncio
@@ -35,8 +32,6 @@ import os
 logger = logging.getLogger(__name__)
 
 def update(context, worker_count):
-    _check_gpg_signing()
-    
     # Load state
     os.makedirs(str(feeds_directory), exist_ok=True)
     state = _State.load()
@@ -83,42 +78,6 @@ def update(context, worker_count):
             executor.shutdown(wait=True)  # workaround for https://github.com/python/asyncio/issues/258
             loop.close()
             
-def _check_gpg_signing():
-    # Check GPG signing works
-    try:
-        # Sign a dummy feed
-        f = NamedTemporaryFile(delete=False)
-        try:
-            f.write(dedent('''\
-                <?xml version='1.0'?>
-                <interface xmlns='http://zero-install.sourceforge.net/2004/injector/interface'>
-                  <name>dummy</name>
-                  <summary>dummy</summary>
-                </interface>'''
-            ).encode())
-            f.close()
-            sign_feed(f.name)
-        finally:
-            f.close()
-            Path(f.name).unlink()
-    except pb.ProcessExecutionError as ex:
-        # It doesn't work
-        shell = (
-            '$ {}\n'
-            '{}\n'
-            '{}'
-            .format(
-                ' '.join(ex.argv),
-                ex.stdout,
-                ex.stderr
-            )
-        )
-        logger.error(
-            'Failed to sign test feed, likely cause: no secret gpg key found.\n\n'
-            + indent(shell, '  ')
-        )
-        sys.exit(1)
-        
 @attr.s(cmp=False, hash=False)
 class _State(object):
     

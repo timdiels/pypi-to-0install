@@ -21,7 +21,7 @@ from contextlib import contextmanager, suppress
 from xmlrpc.client import ServerProxy
 from functools import partial
 from pathlib import Path
-import plumbum as pb
+import subprocess
 import logging
 import shutil
 import asyncio
@@ -83,8 +83,33 @@ def print_memory_usage():
     from pympler import muppy, summary
     summary.print_(summary.summarize(muppy.get_objects()))
 
-def sign_feed(path):
-    pb.local['0launch']('http://0install.net/2006/interfaces/0publish', '--xmlsign', str(path))
+async def sign_feed(path):
+    await check_call(
+        '0launch', 'http://0install.net/2006/interfaces/0publish', '--xmlsign', str(path)
+    )
+
+#TODO add to CTU, perhaps rename, probably too inflexible
+async def check_call(*args):
+    process = await asyncio.create_subprocess_exec(
+        *args,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
+    try:
+        stdout, stderr = await asyncio.gather(
+            process.stdout.read(),
+            process.stderr.read()
+        )
+    except Exception as ex:
+        with suppress(ProcessLookupError):
+            process.terminate()
+        await kill([process.pid], timeout=1)
+        raise ex
+    if process.returncode != 0:
+        raise subprocess.CalledProcessError(
+            process.returncode, args, stdout, stderr
+        )
     
 class PyPITimeout(Exception):
     pass

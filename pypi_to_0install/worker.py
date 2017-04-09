@@ -161,7 +161,7 @@ async def _update_feed(context, package, zi_name, feed_file):
     with atomic_write(feed_file) as f:
         feed.write(f, pretty_print=True)
         f.close()
-        sign_feed(f.name)
+        await sign_feed(f.name)
     
     context.feed_logger.info('Feed written')
 

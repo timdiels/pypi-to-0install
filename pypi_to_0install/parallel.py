@@ -15,9 +15,14 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
+from pypi_to_0install.various import sign_feed
 from pypi_to_0install.pools import CombinedPool
 from pypi_to_0install import worker as worker_
 from contextlib import contextmanager
+from tempfile import NamedTemporaryFile
+from textwrap import dedent, indent
+from pathlib import Path
+import subprocess
 import logging
 import asyncio
 import sys
@@ -34,6 +39,7 @@ async def update(context, worker_count, state):
     in all we are IO bound and thus multiprocessing is unnecessary for optimal
     performance.
     '''
+    await _check_gpg_signing()
     async with CombinedPool(context.pypi_uri) as pool:
         with _exit_on_error() as errored:
             # Create worker_count worker tasks
@@ -63,3 +69,39 @@ def _exit_on_error():
         if errored_:
             logger.error('There were errors, programmer required, see exception(s) in log')
             sys.exit(3)
+
+async def _check_gpg_signing():
+    # Check GPG signing works
+    try:
+        # Sign a dummy feed
+        f = NamedTemporaryFile(delete=False)
+        try:
+            f.write(dedent('''\
+                <?xml version='1.0'?>
+                <interface xmlns='http://zero-install.sourceforge.net/2004/injector/interface'>
+                  <name>dummy</name>
+                  <summary>dummy</summary>
+                </interface>'''
+            ).encode())
+            f.close()
+            await sign_feed(f.name)
+        finally:
+            f.close()
+            Path(f.name).unlink()
+    except subprocess.CalledProcessError as ex:
+        # It doesn't work
+        shell = (
+            '$ {}\n'
+            '{}\n'
+            '{}'
+            .format(
+                ex.cmd,
+                ex.stdout,
+                ex.stderr
+            )
+        )
+        logger.error(
+            'Failed to sign test feed, likely cause: no secret gpg key found.\n\n'
+            + indent(shell, '  ')
+        )
+        sys.exit(1)
