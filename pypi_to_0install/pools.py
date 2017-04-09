@@ -21,11 +21,11 @@ Resource pools
 
 from pypi_to_0install.various import ServerProxy, kill
 from tempfile import TemporaryDirectory
-from contextlib import contextmanager, ExitStack
+from contextlib import contextmanager, ExitStack, suppress
 from asyncio_extras.contextmanager import async_contextmanager
-from async_generator import yield_
 from pathlib import Path
 import plumbum as pb
+import asyncio
 import os
 
 @contextmanager
@@ -123,7 +123,7 @@ class CgroupsPool(object):
     async def get(self):
         with _pool_get(self) as cgroups:
             try:
-                await yield_(cgroups)
+                yield cgroups
             finally:
                 # Kill any process still using the cgroups
                 while True:

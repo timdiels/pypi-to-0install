@@ -8,7 +8,7 @@ sudo: false  # only set to required if you need it; it slows down the build
 python:
     # for available python environments versions, see
     # https://docs.travis-ci.com/user/languages/python/#Choosing-Python-versions-to-test-against
-    - 3.5
+    - 3.6
 
 before_install:
     # If any step fails, build aborts immediately

@@ -25,7 +25,6 @@ from contextlib import suppress, ExitStack
 from patoolib import extract_archive
 from tempfile import TemporaryDirectory, NamedTemporaryFile
 from asyncio_extras.contextmanager import async_contextmanager
-from async_generator import yield_
 from urllib.request import urlretrieve
 from collections import defaultdict
 from pkg_resources import resource_filename
@@ -386,7 +385,7 @@ async def _find_egg_info(context, distribution_directory):
                         # Find egg-info
                         egg_info_directory = next((output_directory / 'out').iterdir())
                         if is_valid(egg_info_directory):
-                            await yield_(egg_info_directory)
+                            yield egg_info_directory
                             return
                 raise _InvalidDistribution(
                     'No valid *.egg-info directory and setup.py egg_info failed or timed out'
@@ -394,10 +393,10 @@ async def _find_egg_info(context, distribution_directory):
     
     egg_info_directory = try_find_egg_info()
     if egg_info_directory:
-        await yield_(egg_info_directory)
+        yield egg_info_directory
     else:
         async with generate_egg_info() as egg_info_directory:
-            await yield_(egg_info_directory)
+            yield egg_info_directory
     
 def _stability(pypi_version):
     version = parse_version(pypi_version)
@@ -464,7 +463,7 @@ async def _unpack_distribution(context, release_url):
                     raise
             
             # Yield
-            await yield_(unpack_directory)
+            yield unpack_directory
         
 def _digest_of(directory):
     '''

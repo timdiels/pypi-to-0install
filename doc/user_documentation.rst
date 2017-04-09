@@ -7,7 +7,7 @@ To install::
 
     git clone https://github.com/timdiels/pypi-to-0install.git
     cd pypi-to-0install
-    python3 -m venv venv && . venv/bin/activate
+    python3.6 -m venv venv && . venv/bin/activate
     pip install -r requirements.txt
 
     # Add 0install python package to what will be our PYTHONPATH
@@ -16,8 +16,9 @@ To install::
     mv 0install-2.3.4/zeroinstall .
     rm -rf 0install-2.3.4*  # cleanup
 
-python3 should be at least python 3.5. You also need to `install Zero Install`_
-such that ``0install`` is available on ``$PATH``.
+PyPI to 0install has been tested with Python 3.6 and requires at least Python
+3.6. You also need to `install Zero Install`_ such that ``0install`` is
+available on ``$PATH``.
 
 The default GPG key will be used to sign feeds. If you don't have one,
 create it with ``gpg --gen-key``; do not use your real name, use something like
@@ -58,7 +59,7 @@ To run::
 
     . $repo_root/venv/bin/activate
     export PYTHONPATH="$repo_root"
-    python3 $repo_root/pypi_to_0install/main.py
+    python $repo_root/pypi_to_0install/main.py
 
 .. _install zero install: http://0install.net/injector.html
 .. _install firejail: https://firejail.wordpress.com/download-2/
