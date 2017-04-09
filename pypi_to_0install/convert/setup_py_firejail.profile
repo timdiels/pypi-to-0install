@@ -35,7 +35,6 @@ noblacklist /run
 noblacklist /sys
 noblacklist /home
 noblacklist /dev
-noblacklist /tmp
 blacklist /*
 blacklist /tmp/.X11-unix
 blacklist /run/user/*/bus
@@ -46,8 +45,6 @@ read-only /*
 # Replace some directories with fake temporary ones
 # /dev
 private-dev
-# /tmp
-private-tmp
 
 # Home is assumed to be replaced by CLI arg: --private=$some_dir
 

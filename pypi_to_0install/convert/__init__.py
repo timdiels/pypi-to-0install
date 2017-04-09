@@ -347,6 +347,7 @@ async def _find_egg_info(context, distribution_directory):
             output_directory = Path(output_directory)
             shutil.copytree(str(distribution_directory), str(output_directory / 'dist'))
             (output_directory / 'out').mkdir()
+            (output_directory / 'tmp').mkdir()
             
             # Run setup.py egg_info in sandbox, in mem limiting cgroup, with disk
             # quota and 10 sec time limit

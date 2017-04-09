@@ -17,4 +17,4 @@ firejail \
     --private="$output_directory" \
     --profile="$firejail_profile_file" \
     -- sh -c \
-    "cd dist && $python setup.py egg_info --egg-base ../out"
+    "export TMPDIR=$HOME/tmp && cd dist && $python setup.py egg_info --egg-base ../out"
