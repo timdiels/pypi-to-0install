@@ -18,6 +18,10 @@
 import attr
 from ._version import parse_version, Modifier, InvalidVersion, Version
 from zeroinstall.injector.versions import parse_version as zi_parse_version
+
+class _EmptyRange(object):
+    pass
+_empty_range = _EmptyRange()
     
 def convert_specifiers(context, specifiers):
     '''
@@ -116,11 +120,15 @@ class _Range(AST):
         
         Returns
         -------
-        _Range
+        _Range or None
+            None if intersection is empty, range otherwise
         '''
         start = max(self.start, other.start)
         end = min(self.end, other.end)
-        return _Range(start, end)
+        if start < end:
+            return _Range(start, end)
+        else:
+            return _empty_range
     
     def __lt__(self, other):
         return self.start < other.start
@@ -386,7 +394,8 @@ def _remove_and(ast):
             # (r1 | r2 ...) & (r3 | r4 ...)
             # to
             # ((r1 & r3) | (r1 & r4) | (r2 & r3) | (r2 & r4) ...)
-            left = _Or(range1 & range2 for range1 in left.ranges for range2 in right.ranges)
+            ranges = (range1 & range2 for range1 in left.ranges for range2 in right.ranges)
+            left = _Or(range_ for range_ in ranges if range_ != _empty_range)
         return left
     elif isinstance(ast, _Range):
         return _Or((ast,))
