@@ -345,7 +345,11 @@ async def _find_egg_info(context, distribution_directory):
             
             # Prepare output_directory
             output_directory = Path(output_directory)
-            shutil.copytree(str(distribution_directory), str(output_directory / 'dist'))
+            distribution_directory_ = output_directory / 'dist'
+            shutil.copytree(str(distribution_directory), str(distribution_directory_))
+            with NamedTemporaryFile(dir=str(distribution_directory_), delete=False) as f:
+                setup_file = Path.home() / Path(f.name).relative_to(output_directory)
+                f.write(pkg_resources.resource_string(__name__, 'setuptools_setup.py'))
             (output_directory / 'out').mkdir()
             (output_directory / 'tmp').mkdir()
             
@@ -360,7 +364,8 @@ async def _find_egg_info(context, distribution_directory):
                             [
                                 'sh', _setup_py_firejail_sh,
                                 output_directory, _setup_py_profile_file,
-                                python
+                                python,
+                                setup_file
                             ] +
                             tasks_files
                         )

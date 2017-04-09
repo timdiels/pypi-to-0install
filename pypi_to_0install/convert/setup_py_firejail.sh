@@ -5,7 +5,8 @@ set -o errexit -o nounset
 output_directory="$1"
 firejail_profile_file="$2"
 python="$3"
-shift 3
+setup="$4"
+shift 4
 
 for tasks_file in "$@"
 do
@@ -17,4 +18,4 @@ firejail \
     --private="$output_directory" \
     --profile="$firejail_profile_file" \
     -- sh -c \
-    "export TMPDIR=$HOME/tmp && cd dist && $python setup.py egg_info --egg-base ../out"
+    "cd dist && TMPDIR=$HOME/tmp PYTHONPATH=`dirname $setup` $python $setup egg_info --egg-base ../out ; true"
