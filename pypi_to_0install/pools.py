@@ -25,8 +25,12 @@ from contextlib import contextmanager, ExitStack, suppress
 from asyncio_extras.contextmanager import async_contextmanager
 from pathlib import Path
 import plumbum as pb
+import logging
 import asyncio
+import errno
 import os
+
+_logger = logging.getLogger(__name__)
 
 @contextmanager
 def _pool_get(self):
@@ -95,7 +99,7 @@ class CgroupsPool(object):
             cgroups.append(cgroup)
         self._available.append(cgroups)
             
-    def __enter__(self):
+    async def __aenter__(self):
         # Create pypi_to_0install cgroups
         #
         # Note: we never clean these up as we might not have been the ones who
@@ -111,13 +115,40 @@ class CgroupsPool(object):
                 sudo('chown', user, str(cgroup))
         return self
                 
-    def __exit__(self, exc_type, exc_val, traceback):
-        for cgroup in self._all:
-            cgroup.rmdir()
+    async def __aexit__(self, exc_type, exc_val, traceback):
+        # Try to remove all our cgroups
+        await asyncio.gather(
+            *(self._rm_cgroup(cgroup) for cgroup in self._all),
+            return_exceptions=True
+        )
+
+    async def _rm_cgroup(self, cgroup):
+        # Stubbornly remove cgroup
+        while True:
+            try:
+                cgroup.rmdir()
+                return
+            except OSError as ex:
+                if ex.errno == errno.EBUSY:
+                    # If fails due to busy, kill processes in all groups
+                    await self._kill_groups([cgroup])
+                else:
+                    # Else, give up
+                    _logger.warning('Could not remove {}'.format(cgroup))
+                    return
             
-    def _rm_cgroup(self, cgroup):
-        while cgroup.exists():
-            cgroup.rmdir()
+    async def _kill_groups(self, cgroups):
+        '''
+        Kill any process still using the cgroups
+        '''
+        while True:
+            pids = set()
+            for cgroup in cgroups:
+                pids |= set(map(int, (cgroup / 'tasks').read_text().split()))
+            if not pids:
+                break
+            with suppress(asyncio.CancelledError):  # this needs to happen
+                await kill(pids, timeout=2)
     
     @async_contextmanager
     async def get(self):
@@ -125,14 +156,7 @@ class CgroupsPool(object):
             try:
                 yield cgroups
             finally:
-                # Kill any process still using the cgroups
-                while True:
-                    pids = set()
-                    for cgroup in cgroups:
-                        pids |= set(map(int, (cgroup / 'tasks').read_text().split()))
-                    if not pids:
-                        break
-                    await kill(pids, timeout=2)
+                await self._kill_groups(cgroups)
     
 class QuotaDirectoryPool(object):
     
@@ -194,7 +218,6 @@ class CombinedPool(object):
         self._cgroups_pool = CgroupsPool()
         self._quota_directory_pool = QuotaDirectoryPool()
         self._pypi_proxy_pool = ServerProxyPool(pypi_uri)
-        self._exit_stack = ExitStack()
     
     def cgroups(self):
         return self._cgroups_pool.get()
@@ -208,15 +231,13 @@ class CombinedPool(object):
         '''
         return self._pypi_proxy_pool.get()
     
-    def __enter__(self):
-        pools = (
-            self._pypi_proxy_pool,
-            self._quota_directory_pool, 
-            self._cgroups_pool,
-        )
-        for pool in pools:
-            self._exit_stack.enter_context(pool)
+    async def __aenter__(self):
+        self._pypi_proxy_pool.__enter__()
+        self._quota_directory_pool.__enter__()
+        await self._cgroups_pool.__aenter__()
         return self
     
-    def __exit__(self, exc_type, exc_val, traceback):
-        self._exit_stack.close()
+    async def __aexit__(self, exc_type, exc_val, traceback):
+        await self._cgroups_pool.__aexit__(exc_type, exc_val, traceback)
+        self._quota_directory_pool.__exit__(exc_type, exc_val, traceback)
+        self._pypi_proxy_pool.__exit__(exc_type, exc_val, traceback)

@@ -34,7 +34,7 @@ async def update(context, worker_count, state):
     in all we are IO bound and thus multiprocessing is unnecessary for optimal
     performance.
     '''
-    with CombinedPool(context.pypi_uri) as pool:
+    async with CombinedPool(context.pypi_uri) as pool:
         with _exit_on_error() as errored:
             # Create worker_count worker tasks
             packages = list(state.changed.values())
