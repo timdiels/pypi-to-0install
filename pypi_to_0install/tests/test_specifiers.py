@@ -249,3 +249,12 @@ def test_simplified(context, specifiers, expected):
     Test converted specifiers are simplified
     '''
     assert convert_specifiers_(context, specifiers) == expected
+    
+def test_regression(context):
+    '''
+    Regression tests
+    '''
+    # This used to raise ValueError('Range cannot be empty')
+    specifiers = [('>=', '1.6.0'), ('!=', '2.1.0'), ('!=', '1.8.0')]
+    expected = '0-1.6-4..!0-1.8-4 | 0-1.8-4-1..!0-2.1-4 | 0-2.1-4-1..'
+    assert convert_specifiers(context, specifiers) == expected

@@ -465,6 +465,5 @@ def _join_touching_or_overlapping(ranges):
             # Save range1 and continue with range2
             new_ranges.append(range1)
             range1 = range2
-            break
     new_ranges.append(range1)  # Save the last range
     return new_ranges
