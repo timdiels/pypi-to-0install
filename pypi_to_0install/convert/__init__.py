@@ -344,7 +344,7 @@ async def _find_egg_info(context, distribution_directory):
             # Prepare output_directory
             output_directory = Path(output_directory)
             distribution_directory_ = output_directory / 'dist'
-            shutil.copytree(str(distribution_directory), str(distribution_directory_))
+            shutil.copytree(str(distribution_directory), str(distribution_directory_), symlinks=True)
             with NamedTemporaryFile(dir=str(distribution_directory_), delete=False) as f:
                 setup_file = Path.home() / Path(f.name).relative_to(output_directory)
                 f.write(pkg_resources.resource_string(__name__, 'setuptools_setup.py'))
