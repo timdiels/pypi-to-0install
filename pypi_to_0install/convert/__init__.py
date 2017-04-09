@@ -378,7 +378,8 @@ async def _find_egg_info(context, distribution_directory):
                         except:
                             # Note: when exiting cgroups, it will kill and wait
                             # for any processes still using the cgroup
-                            process.terminate() 
+                            with suppress(ProcessLookupError):
+                                process.terminate()
                             raise
                         
                         # Find egg-info
