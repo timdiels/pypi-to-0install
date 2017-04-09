@@ -35,7 +35,6 @@ from copy import deepcopy
 from lxml import etree
 import urllib.error
 import pkg_resources
-import plumbum as pb
 import contextlib
 import subprocess
 import pypandoc
@@ -357,7 +356,7 @@ async def _find_egg_info(context, distribution_directory):
             for python in ('python2', 'python3'):
                 async with context.pool.cgroups() as cgroups:
                     tasks_files = [cgroup / 'tasks' for cgroup in cgroups]
-                    with suppress(pb.ProcessExecutionError, StopIteration, asyncio.TimeoutError):
+                    with suppress(StopIteration, asyncio.TimeoutError):
                         # Create egg info with setup.py
                         args = map(str,
                             [
