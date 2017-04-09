@@ -15,17 +15,22 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
-import re
-import attr
 from lxml.builder import ElementMaker
 from tempfile import NamedTemporaryFile
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from xmlrpc.client import ServerProxy
 from functools import partial
 from pathlib import Path
 import plumbum as pb
+import logging
 import shutil
+import asyncio
+import psutil
+import attr
+import re
+import os
 
+_logger = logging.getLogger(__name__)
 zi_namespaces = {
     None: 'http://zero-install.sourceforge.net/2004/injector/interface',
     'compile': 'http://zero-install.sourceforge.net/2006/namespaces/0compile'
@@ -34,12 +39,6 @@ zi = ElementMaker(namespace=zi_namespaces[None], nsmap=zi_namespaces)
 
 ServerProxy = partial(ServerProxy, use_datetime=True)
 feeds_directory = Path('feeds').absolute()
-_cgroup_root = Path('/sys/fs/cgroup')
-cgroup_subsystems = ('memory', 'blkio')  # the cgroup subsystems we use
-cgroup_subsystems = {
-    subsystem: _cgroup_root / subsystem / 'pypi_to_0install'
-    for subsystem in cgroup_subsystems
-} 
 
 def canonical_name(pypi_name):
     '''
@@ -90,5 +89,42 @@ def sign_feed(path):
 class PyPITimeout(Exception):
     pass
 
-class Cancelled(Exception):
-    '''When SIGTERM, SIGINT, SIGHUP has been received'''
+def async_cancel():
+    _logger.info('Cancelling')
+    for task in asyncio.Task.all_tasks():
+        task.cancel()
+
+async def kill(pids, timeout):
+    '''
+    Kill process and wait it to terminate
+    
+    First sends SIGTERM, then after a timeout sends SIGKILL.
+    
+    Parameters
+    ----------
+    pids : iterable(int)
+        Processes to kill
+    timeout : int
+        Timeout in seconds before sending SIGKILL.
+    '''
+    processes = []
+    for pid in pids:
+        with suppress(psutil.NoSuchProcess):
+            processes.append(psutil.Process(pid))
+    if not processes:
+        return
+    
+    # Send SIGTERM
+    for process in processes:
+        with suppress(psutil.NoSuchProcess):
+            process.terminate()
+                
+    # Wait
+    _, processes = await asyncio.get_event_loop().run_in_executor(None, psutil.wait_procs, processes, timeout)
+    
+    # Send SIGKILL
+    if processes:
+        for process in processes:
+            with suppress(psutil.NoSuchProcess):
+                process.kill()
+                

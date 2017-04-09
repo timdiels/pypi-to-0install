@@ -16,41 +16,45 @@
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
 from pypi_to_0install.various import (
-    zi, zi_namespaces, canonical_name, cgroup_subsystems, PyPITimeout,
-    Cancelled
+    zi, zi_namespaces, canonical_name, PyPITimeout, kill
 )
-from copy import deepcopy
-from lxml import etree
-from pathlib import Path
-from contextlib import contextmanager, suppress
-import contextlib
-import attr
-import pypandoc
-from patoolib import extract_archive
-import patoolib
-from tempfile import TemporaryDirectory, NamedTemporaryFile
-from urllib.request import urlretrieve
-import urllib.error
-import pkginfo
 from ._version import parse_version, InvalidVersion
 from ._specifiers import convert_specifiers
-import logging
-from collections import defaultdict
-import pkg_resources
-from zeroinstall.zerostore import manifest
-import hashlib
 from chicken_turtle_util import path as path_
-import plumbum as pb
-import xmlrpc
-import time
-import shutil
+from contextlib import suppress, ExitStack
+from patoolib import extract_archive
+from tempfile import TemporaryDirectory, NamedTemporaryFile
+from asyncio_extras.contextmanager import async_contextmanager
+from async_generator import yield_
+from urllib.request import urlretrieve
+from collections import defaultdict
 from pkg_resources import resource_filename
+from zeroinstall.zerostore import manifest
+from functools import partial, wraps
+from pathlib import Path
+from copy import deepcopy
+from lxml import etree
+import urllib.error
+import pkg_resources
+import plumbum as pb
+import contextlib
+import subprocess
+import pypandoc
+import patoolib
+import pkginfo
+import logging
+import hashlib
+import asyncio
+import xmlrpc
+import shutil
+import attr
+import time
 
 _setup_py_profile_file = Path(resource_filename(__name__, 'setup_py_firejail.profile')).absolute()
 _setup_py_firejail_sh = Path(resource_filename(__name__, 'setup_py_firejail.sh')).absolute()
 logger = logging.getLogger(__name__)
 
-def convert(context, package, zi_name, old_feed):
+async def convert(context, package, zi_name, old_feed):
     '''
     Convert PyPI package to ZI feed
     
@@ -76,8 +80,18 @@ def convert(context, package, zi_name, old_feed):
         context.feed_logger.warning('Blacklisting distribution, will not retry')
         package.blacklisted_distributions.add(release_url['url'])
         
+    @_async_pypi(context)
+    def release_data():
+        with context.pool.pypi() as pypi:
+            return pypi.release_data(package.name, max_version)
+            
+    @_async_pypi(context)
+    def release_urls(py_version):
+        with context.pool.pypi() as pypi:
+            return pypi.release_urls(package.name, py_version) 
+        
     finished = True
-    versions = _versions(context, package)
+    versions = await _versions(context, package)
     if not versions:
         raise NoValidRelease()
     
@@ -85,14 +99,14 @@ def convert(context, package, zi_name, old_feed):
     # latest version
     py_versions = [pair[0] for pair in versions]
     max_version = max(py_versions, key=parse_version)
-    release_data = _retry_pypi(context, lambda: context.pypi.release_data(package.name, max_version))
-    release_data['version'] = max_version
-    release_data = {k:v for k, v in release_data.items() if v is not None and v != ''}
-    feed = _convert_general(context, package.name, zi_name, release_data)
+    release_data_ = await release_data()
+    release_data_['version'] = max_version
+    release_data_ = {k:v for k, v in release_data_.items() if v is not None and v != ''}
+    feed = _convert_general(context, package.name, zi_name, release_data_)
     
     # Add <implementation>s to feed
     for py_version, zi_version in versions:
-        for release_url in _retry_pypi(context, lambda: context.pypi.release_urls(package.name, py_version)):
+        for release_url in await release_urls(py_version):
             if release_url['url'] in package.blacklisted_distributions:
                 continue
             try:
@@ -100,7 +114,7 @@ def convert(context, package, zi_name, old_feed):
                 action = 'Converting' if package_type == 'sdist' else 'Skipping' 
                 context.feed_logger.info('{} {} distribution: {}'.format(action, package_type, release_url['filename']))
                 if action == 'Converting':
-                    _convert_distribution(context, zi_version, feed, old_feed, release_data, release_url)
+                    await _convert_distribution(context, zi_version, feed, old_feed, release_data_, release_url)
             except _InvalidDownload as ex:  # e.g. md5sum differs
                 finished = False
                 context.feed_logger.warning(
@@ -120,22 +134,29 @@ def convert(context, package, zi_name, old_feed):
     
     return feed, finished
 
-def _retry_pypi(context, call):
+def _async_pypi(context):
     '''
-    Make pypi xmlrpc request, backoff if it times out, then retry until it succeeds
+    Make pypi xmlrpc request async and retry on failure
+    
+    When call times out, it retries after a delay. Upon the 5th failure,
+    PyPITimeout is raised.
     '''
-    for _ in range(5):
-        try:
-            return call()
-        except xmlrpc.client.Fault as ex:
-            if 'timeout' in str(ex).lower():
-                context.feed_logger.warning(
-                    'PyPI request timed out, this worker will back off for 5 minutes. '
-                    'We may be throttled, consider using less workers to put less load on PyPI'
-                )
-                logger.exception(ex) #TODO
-                time.sleep(5*60)
-    raise PyPITimeout('5 consecutive PyPI requests (on this worker) timed out with 5 minutes between each request')
+    def decorator(call):
+        @wraps(call)
+        async def decorated(*args):
+            for _ in range(5):
+                try:
+                    return await asyncio.get_event_loop().run_in_executor(None, call, *args)
+                except xmlrpc.client.Fault as ex:
+                    if 'timeout' in str(ex).lower():
+                        context.feed_logger.warning(
+                            'PyPI request timed out, this worker will back off for 5 minutes. '
+                            'We may be throttled, consider using less workers to put less load on PyPI'
+                        )
+                        await asyncio.sleep(5*60)
+            raise PyPITimeout('5 consecutive PyPI requests (on this worker) timed out with 5 minutes between each request')
+        return decorated
+    return decorator
 
 class NoValidRelease(Exception):
     '''
@@ -145,7 +166,7 @@ class NoValidRelease(Exception):
 class _InvalidDistribution(Exception):
     pass
 
-def _versions(context, package):
+async def _versions(context, package):
     '''
     Get versions of package
     
@@ -153,8 +174,12 @@ def _versions(context, package):
     -------
     [(py_version :: str, zi_version :: str)]
     '''
-    show_hidden = True
-    py_versions = context.pypi.package_releases(package.name, show_hidden)  # returns [str]
+    @_async_pypi(context)
+    def package_releases():
+        show_hidden = True
+        with context.pool.pypi() as pypi:
+            return pypi.package_releases(package.name, show_hidden)
+    py_versions = await package_releases()  # returns [str]
     versions = []
     for py_version in py_versions:
         if py_version in package.blacklisted_versions:
@@ -201,24 +226,23 @@ def _convert_general(context, pypi_name, zi_name, release_data):
         
     return etree.ElementTree(interface)
 
-def _convert_distribution(context, zi_version, feed, old_feed, release_data, release_url):
+async def _convert_distribution(context, zi_version, feed, old_feed, release_data, release_url):
     '''
     Append <implementation> to feed, converted from distribution
     '''
     # Add from old_feed if it already has it (distributions can be deleted, but not changed or reuploaded)
     implementations = old_feed.xpath('//implementation[@id={!r}]'.format(release_url['path']))
-    if implementations: #TODO test this, e.g. doe we have to add xpath(namespaces=nsmap)?
+    if implementations: #TODO test this, e.g. do we have to add xpath(namespaces=nsmap)?
         context.feed_logger.info('Reusing from old feed')
         feed.append(implementations[0])
         return
     
     # Not in old feed, need to convert.
-    with _unpack_distribution(context, release_url) as unpack_directory:
+    async with _unpack_distribution(context, release_url) as unpack_directory:
         distribution_directory = _find_distribution_directory(unpack_directory)
         context.feed_logger.debug('Generating <implementation>')
         
-        with TemporaryDirectory(dir=str(context.quota_directory)) as temporary_directory:
-            egg_info_directory = _find_egg_info(context, distribution_directory, Path(temporary_directory))
+        async with _find_egg_info(context, distribution_directory) as egg_info_directory:
             package = pkginfo.UnpackedSDist(str(egg_info_directory))
             requirements = _convert_dependencies(context, egg_info_directory)
         
@@ -286,7 +310,8 @@ def _find_distribution_directory(unpack_directory):
     else:
         raise _InvalidDistribution('sdist is empty')
         
-def _find_egg_info(context, distribution_directory, output_directory):
+@async_contextmanager
+async def _find_egg_info(context, distribution_directory):
     '''
     Get *.egg-info directory
     
@@ -313,47 +338,60 @@ def _find_egg_info(context, distribution_directory, output_directory):
                 return egg_info_directory
         return None
             
-    def try_generate_egg_info():
-        # Prepare output_directory
-        shutil.copytree(str(distribution_directory), str(output_directory / 'dist'))
-        (output_directory / 'out').mkdir()
-        
-        # Run setup.py egg_info in sandbox, in mem limiting cgroup, with disk quota
-        tasks_files = [context.cgroup(subsystem) / 'tasks' for subsystem in cgroup_subsystems]
-        for python in ('python2', 'python3'):
-            with suppress(pb.ProcessExecutionError, StopIteration):
-                try:
-                    pb.local['sh'](
-                        _setup_py_firejail_sh,
-                        output_directory,
-                        _setup_py_profile_file,
-                        python,
-                        *tasks_files,
-                        timeout=10
-                    )
-                except Cancelled as ex:
-                    #TODO wait for pb process to die. It seems pb sent it a
-                    #sigterm, not sure whether pb is waiting in separate thread
-                    #to kill it if it takes too long
-                    print(repr(ex))
-                    raise
-                
-                # Find egg-info
-                egg_info_directory = next((output_directory / 'out').iterdir())
-                if is_valid(egg_info_directory):
-                    return egg_info_directory
-        
-        # Failed to generate egg-info
-        return None
+    @async_contextmanager
+    async def generate_egg_info():
+        with context.pool.quota_directory() as quota_directory, \
+            TemporaryDirectory(dir=str(quota_directory)) as output_directory:
+            
+            # Prepare output_directory
+            output_directory = Path(output_directory)
+            shutil.copytree(str(distribution_directory), str(output_directory / 'dist'))
+            (output_directory / 'out').mkdir()
+            
+            # Run setup.py egg_info in sandbox, in mem limiting cgroup, with disk
+            # quota and 10 sec time limit
+            for python in ('python2', 'python3'):
+                async with context.pool.cgroups() as cgroups:
+                    tasks_files = [cgroup / 'tasks' for cgroup in cgroups]
+                    with suppress(pb.ProcessExecutionError, StopIteration, asyncio.TimeoutError):
+                        # Create egg info with setup.py
+                        args = map(str,
+                            [
+                                'sh', _setup_py_firejail_sh,
+                                output_directory, _setup_py_profile_file,
+                                python
+                            ] +
+                            tasks_files
+                        )
+                        process = await asyncio.create_subprocess_exec(
+                            *args,
+                            stdin=subprocess.DEVNULL,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL
+                        )
+                        try:
+                            await asyncio.wait_for(process.wait(), timeout=10)
+                        except:
+                            # Note: when exiting cgroups, it will kill and wait
+                            # for any processes still using the cgroup
+                            process.terminate() 
+                            raise
+                        
+                        # Find egg-info
+                        egg_info_directory = next((output_directory / 'out').iterdir())
+                        if is_valid(egg_info_directory):
+                            await yield_(egg_info_directory)
+                            return
+                raise _InvalidDistribution(
+                    'No valid *.egg-info directory and setup.py egg_info failed or timed out'
+                )
     
-    egg_info_directory = (
-        try_find_egg_info() or
-        try_generate_egg_info()
-    )
-    if not egg_info_directory:
-        raise _InvalidDistribution('No valid *.egg-info directory and setup.py egg_info failed or timed out')
-    return egg_info_directory
-
+    egg_info_directory = try_find_egg_info()
+    if egg_info_directory:
+        await yield_(egg_info_directory)
+    else:
+        async with generate_egg_info() as egg_info_directory:
+            await yield_(egg_info_directory)
     
 def _stability(pypi_version):
     version = parse_version(pypi_version)
@@ -367,8 +405,8 @@ def _stability(pypi_version):
 class _InvalidDownload(Exception):
     pass
 
-@contextmanager
-def _unpack_distribution(context, release_url):
+@async_contextmanager
+async def _unpack_distribution(context, release_url):
     # Get url
     if context.pypi_mirror:
         url = '{}packages/{}'.format(context.pypi_mirror, release_url['path'])
@@ -379,7 +417,8 @@ def _unpack_distribution(context, release_url):
         # Download
         context.feed_logger.debug('Downloading {}'.format(url))
         distribution_file = Path(f.name)
-        urlretrieve(url, str(distribution_file))
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, urlretrieve, url, str(distribution_file))
     
         # Check md5 hash
         expected_digest = release_url['md5_digest']
@@ -400,7 +439,18 @@ def _unpack_distribution(context, release_url):
             
             context.feed_logger.debug('Unpacking')
             try:
-                unpack_directory = Path(extract_archive(str(distribution_file), outdir=str(temporary_directory), interactive=False, verbosity=-1))
+                unpack_directory = Path(
+                    await loop.run_in_executor(
+                        None,
+                        partial(
+                            extract_archive,
+                            str(distribution_file),
+                            outdir=str(temporary_directory),
+                            interactive=False,
+                            verbosity=-1
+                        )
+                    )
+                )
             except patoolib.util.PatoolError as ex:
                 if 'unknown archive' in ex.args[0]:
                     raise _InvalidDistribution('Invalid archive or unknown archive format') from ex
@@ -408,7 +458,7 @@ def _unpack_distribution(context, release_url):
                     raise
             
             # Yield
-            yield unpack_directory
+            await yield_(unpack_directory)
         
 def _digest_of(directory):
     '''

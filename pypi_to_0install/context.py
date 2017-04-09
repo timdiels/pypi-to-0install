@@ -15,7 +15,6 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
-import logging
 import attr
 
 @attr.s(frozen=True, slots=True, cmp=False, hash=False)

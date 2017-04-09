@@ -16,14 +16,16 @@
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
 from pypi_to_0install.various import (
-    Package, atomic_write, ServerProxy, sign_feed, cgroup_subsystems,
+    Package, atomic_write, ServerProxy, sign_feed,
     feeds_directory
 )
-from pypi_to_0install.pool import parallel_update
+from pypi_to_0install import parallel
+from concurrent.futures import ThreadPoolExecutor
 from tempfile import NamedTemporaryFile
 from textwrap import dedent, indent
 from pathlib import Path
 import plumbum as pb
+import asyncio
 import logging
 import pickle
 import attr
@@ -34,7 +36,6 @@ logger = logging.getLogger(__name__)
 
 def update(context, worker_count):
     _check_gpg_signing()
-    _create_cgroups()
     
     # Load state
     os.makedirs(str(feeds_directory), exist_ok=True)
@@ -69,7 +70,18 @@ def update(context, worker_count):
         
         # Update/create feeds for changed packages, with a pool of worker processes
         logger.debug('Updating feeds with {} workers'.format(worker_count))
-        parallel_update(context, worker_count, state)
+        loop = asyncio.get_event_loop()
+        executor = ThreadPoolExecutor(worker_count * 5)
+        loop.set_default_executor(executor)
+        try:
+            loop.run_until_complete(
+                parallel.update(context, worker_count, state)
+            )
+        except asyncio.CancelledError:
+            sys.exit(2)
+        finally:
+            executor.shutdown(wait=True)  # workaround for https://github.com/python/asyncio/issues/258
+            loop.close()
             
 def _check_gpg_signing():
     # Check GPG signing works
@@ -107,16 +119,6 @@ def _check_gpg_signing():
         )
         sys.exit(1)
         
-def _create_cgroups():
-    sudo = pb.local['sudo']
-    user = pb.local.env['USER']
-    for cgroup in cgroup_subsystems.values():
-        if not cgroup.exists():
-            sudo('mkdir', str(cgroup))
-        if not os.access(str(cgroup), os.W_OK):
-            # Insufficient permissions, set owner to current user
-            sudo('chown', user, str(cgroup))
-
 @attr.s(cmp=False, hash=False)
 class _State(object):
     

@@ -26,9 +26,7 @@ import contextlib
 from pathlib import Path
 import bz2
 
-feed_logger = logging.getLogger(__name__ + ':current_feed')
-
-def configure(context, verbosity):
+def configure(verbosity):
     def reset_logging():
         # Note: zeroinstall calls logging.basicConfig when imported, naughty naughty
         root_logger = logging.getLogger()
@@ -39,7 +37,6 @@ def configure(context, verbosity):
         # Filter out messages that no handler wants
         logging.getLogger().setLevel(logging.INFO)
         logging.getLogger('pypi_to_0install').setLevel(logging.DEBUG)
-        feed_logger.setLevel(logging.DEBUG)
         
     def ensure_zi_name_prefix_filter(record):
         # Ensure each record has zi_name_prefix
@@ -61,18 +58,17 @@ def configure(context, verbosity):
         stderr_handler.setLevel(logging.INFO)
         
         #
+        stderr_handler.addFilter(ensure_zi_name_prefix_filter)
+        
         if verbosity == 1:
             # Exclude feed_logger<ERROR, except the Updating msg
             def filter_(record):
                 return (
-                    record.name != feed_logger.name or
+                    not record.zi_name_prefix or  # not a feed logger
                     record.levelno >= logging.ERROR or
                     record.msg.startswith('Updating ')
                 )
             stderr_handler.addFilter(filter_)
-        
-        #
-        stderr_handler.addFilter(ensure_zi_name_prefix_filter)
             
         # Add to root logger
         logging.getLogger().addHandler(stderr_handler)
@@ -101,10 +97,13 @@ def configure(context, verbosity):
 _feed_log_max_bytes = 2**30 // 150e3
 
 @contextmanager
-def configure_feed_logger(zi_name, log_file):
+def feed_logger(zi_name, log_file):
     '''
     Temporarily configure feed_logger for feed 
     '''
+    feed_logger = logging.getLogger('{}:feed:{}'.format(__name__, zi_name))
+    feed_logger.setLevel(logging.DEBUG)
+    
     # File handler
     file_handler = _CompressedRotatingFileHandler(str(log_file), _feed_log_max_bytes)
     with contextlib.closing(file_handler):
@@ -120,7 +119,7 @@ def configure_feed_logger(zi_name, log_file):
         feed_logger.addHandler(file_handler)
         feed_logger.addFilter(filter_)
         try:
-            yield
+            yield feed_logger
         finally:
             feed_logger.removeHandler(file_handler)
             feed_logger.removeFilter(filter_)

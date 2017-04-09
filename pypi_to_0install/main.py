@@ -21,15 +21,16 @@ CLI interface; signals setup
 Entry point of the main process
 '''
 
-from pypi_to_0install.various import Cancelled
+from pypi_to_0install.various import async_cancel
 from pypi_to_0install.update import update
 from pypi_to_0install.context import Context
 from pypi_to_0install import logging as logging_
 from pathlib import Path
-import multiprocessing as mp
 import logging
+import asyncio
 import signal
 import click
+import sys
 import os
 import re
 
@@ -72,28 +73,42 @@ def _default_workers():
     'This does not affect logging to files'
 )
 def main(workers, pypi_mirror, verbosity):
+    '''
+    Update/create feeds
+    
+    Exit codes: 0=success, 1=generic error, 2=cancel, 3=unhandled error
+    '''
     context = Context(
         pypi_uri='https://pypi.python.org/pypi',
         base_uri='https://timdiels.github.io/pypi-to-0install/',
         pypi_mirror=pypi_mirror,
     )
     
-    logging_.configure(context, verbosity)
-    mp.set_start_method('fork')
-    
-    # Clean exit on cancellation signals
-    def cancel(signal_, frame):
-        raise Cancelled(signal_)
-    for signal_ in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
-        signal.signal(signal_, cancel)
+    logging_.configure(verbosity)
+    set_signal_handlers()
     
     # Run
     try:
         update(context, workers)
-    except Cancelled:
-        pass
     finally:
         logger.info('Exited cleanly')
+        
+def set_signal_handlers():
+    cancellation_signals = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
+    
+    # Clean exit on cancellation
+    def cancel(signal_, frame):
+        logger.info('Cancelling')
+        sys.exit(2)
+    for signal_ in cancellation_signals:
+        signal.signal(signal_, cancel)
+    
+    # Switch to asyncio cancel handlers as soon as asyncio loop starts
+    loop = asyncio.get_event_loop()
+    def set_handlers():
+        for signal_ in cancellation_signals:
+            loop.add_signal_handler(signal_, async_cancel)
+    loop.call_soon(set_handlers)
 
 if __name__ == '__main__':
     main()
