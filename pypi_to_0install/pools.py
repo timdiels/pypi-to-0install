@@ -84,9 +84,9 @@ class CgroupsPool(object):
             cgroup.mkdir()  # Create group
             self._all.append(cgroup)
             if subsystem == 'memory':
-                # Limit to 10MB of memory+swap usage
-                (cgroup / 'memory.limit_in_bytes').write_text('10M', encoding='ascii')
-                (cgroup / 'memory.memsw.limit_in_bytes').write_text('10M', encoding='ascii')
+                # Limit to 50MB of memory+swap usage
+                (cgroup / 'memory.limit_in_bytes').write_text('50M', encoding='ascii')
+                (cgroup / 'memory.memsw.limit_in_bytes').write_text('50M', encoding='ascii')
             elif subsystem == 'blkio':
                 # give minimal priority for disk IO
                 (cgroup / 'blkio.weight').write_text('100', encoding='ascii')
