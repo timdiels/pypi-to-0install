@@ -541,7 +541,10 @@ def _parse_requirements(egg_info_directory):
         dependencies_file = egg_info_directory / name
         if dependencies_file.exists():
             for extra, requirements in pkg_resources.split_sections(dependencies_file.read_text().splitlines()):
-                all_requirements[extra].extend(pkg_resources.parse_requirements(requirements))
+                try:
+                    all_requirements[extra].extend(pkg_resources.parse_requirements(requirements))
+                except pkg_resources.RequirementParseError as ex:
+                    raise _InvalidDistribution('{} failed to parse'.format(name)) from ex
     return all_requirements
 
 _languages = {
