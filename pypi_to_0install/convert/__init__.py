@@ -460,6 +460,8 @@ async def _unpack_distribution(context, release_url):
                 if 'unknown archive' in ex.args[0]:
                     raise _InvalidDistribution('Invalid archive or unknown archive format') from ex
                 else:
+                    print(ex)
+                    print(dir(ex))
                     raise
             
             # Yield

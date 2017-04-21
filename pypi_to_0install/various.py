@@ -19,6 +19,7 @@ from lxml.builder import ElementMaker
 from tempfile import NamedTemporaryFile
 from contextlib import contextmanager, suppress
 from xmlrpc.client import ServerProxy
+from textwrap import indent, dedent
 from functools import partial
 from pathlib import Path
 import subprocess
@@ -88,7 +89,36 @@ async def sign_feed(path):
         '0launch', 'http://0install.net/2006/interfaces/0publish', '--xmlsign', str(path)
     )
 
-#TODO add to CTU, perhaps rename, probably too inflexible
+class CalledProcessError(subprocess.CalledProcessError):
+
+    '''
+    Like CalledProcessError, but with a verbose __str__
+    '''
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def __str__(self):
+        stdout = indent(self.stdout.decode(), '  ')
+        stderr = indent(self.stderr.decode(), '  ')
+        return dedent('''\
+            Process exited {}, command:
+              {}
+
+            out:
+            {}
+
+            err:
+            {}
+            '''.format(
+                self.returncode,
+                ' '.join(map(repr, self.cmd)),
+                stdout,
+                stderr
+            )
+        )
+
+# TODO add to CTU, perhaps rename, probably too inflexible
 async def check_call(*args):
     process = await asyncio.create_subprocess_exec(
         *args,
@@ -107,7 +137,7 @@ async def check_call(*args):
         await kill([process.pid], timeout=1)
         raise ex
     if process.returncode != 0:
-        raise subprocess.CalledProcessError(
+        raise CalledProcessError(
             process.returncode, args, stdout, stderr
         )
     

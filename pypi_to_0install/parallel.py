@@ -90,18 +90,8 @@ async def _check_gpg_signing():
             Path(f.name).unlink()
     except subprocess.CalledProcessError as ex:
         # It doesn't work
-        shell = (
-            '$ {}\n'
-            '{}\n'
-            '{}'
-            .format(
-                ex.cmd,
-                ex.stdout,
-                ex.stderr
-            )
-        )
         logger.error(
             'Failed to sign test feed, likely cause: no secret gpg key found.\n\n'
-            + indent(shell, '  ')
+            + indent(str(ex), ' ' * 4)
         )
         sys.exit(1)
