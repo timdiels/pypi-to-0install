@@ -325,10 +325,14 @@ async def _find_egg_info(context, distribution_directory):
 
     Parameters
     ----------
+    context : WorkerContext
+    unpack_directory : Path
+        Directory in which distribution was unpacked.
     distribution_directory : Path
-        Directory with setup.py of the distribution
-    output_directory : Path
-        Directory to generate egg-info in if it is missing
+        Directory with setup.py of the distribution. This parent directory
+        should have a disk quota to guard against a malicious setup.py. Files
+        and directories may be created in this directory, or as siblings to this
+        directory.
 
     Returns
     -------
@@ -348,56 +352,52 @@ async def _find_egg_info(context, distribution_directory):
 
     @async_contextmanager
     async def generate_egg_info():
-        with context.pool.quota_directory() as output_directory:
-            # Prepare output_directory
-            output_directory = Path(output_directory)
-            distribution_directory_ = output_directory / 'dist'
-            shutil.copytree(str(distribution_directory), str(distribution_directory_), symlinks=True)
-            with NamedTemporaryFile(dir=str(distribution_directory_), delete=False) as f:
-                setup_file = Path.home() / Path(f.name).relative_to(output_directory)
-                f.write(pkg_resources.resource_string(__name__, 'setuptools_setup.py'))
-            (output_directory / 'out').mkdir()
-            (output_directory / 'tmp').mkdir()
+        # Prepare output_directory
+        with NamedTemporaryFile(dir=str(distribution_directory), delete=False) as f:
+            setup_file = f.name
+            f.write(pkg_resources.resource_string(__name__, 'setuptools_setup.py'))
+        output_directory = distribution_directory.with_name(distribution_directory.name + '.out')
+        output_directory.mkdir()
+        distribution_directory.with_name(distribution_directory.name + '.tmp').mkdir()
 
-            # Run setup.py egg_info in sandbox, in mem limiting cgroup, with disk
-            # quota and 10 sec time limit
-            for python in ('python2', 'python3'):
-                async with context.pool.cgroups() as cgroups:
-                    tasks_files = [cgroup / 'tasks' for cgroup in cgroups]
-                    with suppress(StopIteration, asyncio.TimeoutError):
-                        # Create egg info with setup.py
-                        args = map(str,
-                            [
-                                'sh', _setup_py_firejail_sh,
-                                output_directory, _setup_py_profile_file,
-                                python,
-                                setup_file
-                            ] +
-                            tasks_files
-                        )
-                        process = await asyncio.create_subprocess_exec(
-                            *args,
-                            stdin=subprocess.DEVNULL,
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL
-                        )
-                        try:
-                            await asyncio.wait_for(process.wait(), timeout=10)
-                        except:
-                            # Note: when exiting cgroups, it will kill and wait
-                            # for any processes still using the cgroup
-                            with suppress(ProcessLookupError):
-                                process.terminate()
-                            raise
+        # Run setup.py egg_info in sandbox, in mem limiting cgroup, with disk
+        # quota and 10 sec time limit
+        for python in ('python2', 'python3'):
+            async with context.pool.cgroups() as cgroups:
+                tasks_files = [cgroup / 'tasks' for cgroup in cgroups]
+                with suppress(StopIteration, asyncio.TimeoutError):
+                    # Create egg info with setup.py
+                    args = map(str,
+                        [
+                            'sh', _setup_py_firejail_sh,
+                            distribution_directory, _setup_py_profile_file,
+                            python, setup_file
+                        ] +
+                        tasks_files
+                    )
+                    process = await asyncio.create_subprocess_exec(
+                        *args,
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                    try:
+                        await asyncio.wait_for(process.wait(), timeout=10)
+                    except:
+                        # Note: when exiting cgroups, it will kill and wait
+                        # for any processes still using the cgroup
+                        with suppress(ProcessLookupError):
+                            process.terminate()
+                        raise
 
-                        # Find egg-info
-                        egg_info_directory = next((output_directory / 'out').iterdir())
-                        if is_valid(egg_info_directory):
-                            yield egg_info_directory
-                            return
-                raise _InvalidDistribution(
-                    'No valid *.egg-info directory and setup.py egg_info failed or timed out'
-                )
+                    # Find egg-info
+                    egg_info_directory = next(output_directory.iterdir())
+                    if is_valid(egg_info_directory):
+                        yield egg_info_directory
+                        return
+            raise _InvalidDistribution(
+                'No valid *.egg-info directory and setup.py egg_info failed or timed out'
+            )
 
     egg_info_directory = try_find_egg_info()
     if egg_info_directory:
@@ -449,7 +449,7 @@ async def _unpack_distribution(context, release_url):
                 )
 
         # Unpack
-        with TemporaryDirectory() as temporary_directory:
+        with context.pool.quota_directory() as temporary_directory:
             temporary_directory = Path(temporary_directory)
 
             context.feed_logger.debug('Unpacking')

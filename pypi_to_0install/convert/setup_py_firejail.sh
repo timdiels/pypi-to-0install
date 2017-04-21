@@ -2,11 +2,15 @@
 # Try generate egg-info in sandbox
 set -o errexit -o nounset
 
-output_directory="$1"
+distribution_dir="$1"
 firejail_profile_file="$2"
 python="$3"
 setup="$4"
 shift 4
+
+root_dir=`dirname $distribution_dir`
+distribution=`basename $distribution_dir`
+distribution="$HOME/$distribution"
 
 for tasks_file in "$@"
 do
@@ -15,7 +19,7 @@ done
 
 firejail \
     --shell=/bin/sh \
-    --private="$output_directory" \
+    --private="$root_dir" \
     --profile="$firejail_profile_file" \
     -- sh -c \
-    "cd dist && TMPDIR=$HOME/tmp PYTHONPATH=`dirname $setup` $python $setup egg_info --egg-base ../out ; true"
+    "cd $distribution && TMPDIR=$distribution.tmp PYTHONPATH=`$distribution` $python $setup egg_info --egg-base $distribution.out ; true"
