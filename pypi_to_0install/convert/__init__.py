@@ -109,10 +109,12 @@ async def convert(context, package, zi_name, old_feed):
                 continue
             try:
                 package_type = release_url['packagetype']
-                action = 'Converting' if package_type == 'sdist' else 'Skipping'
-                context.feed_logger.info('{} {} distribution: {}'.format(action, package_type, release_url['filename']))
-                if action == 'Converting':
+                if package_type == 'sdist':
+                    context.feed_logger.info('Converting {} distribution: {}'.format(package_type, release_url['filename']))
                     await _convert_distribution(context, zi_version, feed, old_feed, release_data_, release_url)
+                else:
+                    context.feed_logger.info('{} is unsupported, skipping distribution: {}'.format(package_type, release_url['filename']))
+                    blacklist(release_url)
             except _InvalidDownload as ex:  # e.g. md5sum differs
                 finished = False
                 context.feed_logger.warning(
@@ -304,7 +306,7 @@ def _find_distribution_directory(unpack_directory):
         else:
             raise _InvalidDistribution('Could not find setup.py')
     elif children:
-        raise _InvalidDistribution('sdist is a tar bomb. These are unsupported')
+        raise _InvalidDistribution('sdist is a tar bomb')
     else:
         raise _InvalidDistribution('sdist is empty')
 
