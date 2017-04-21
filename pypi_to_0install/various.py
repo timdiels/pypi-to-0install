@@ -135,6 +135,7 @@ async def check_call(*args):
             process.terminate()
         await kill([process.pid], timeout=1)
         raise ex
+    await process.wait()
     if process.returncode != 0:
         raise CalledProcessError(
             process.returncode, args, stdout, stderr
