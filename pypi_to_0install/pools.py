@@ -169,11 +169,10 @@ class QuotaDirectoryPool(object):
         self._available = []
 
     def _add(self):
-        # Create temporary directory with disk quota of 96MB
-        # I.e. 100MB - 4MB overhead from ext2
+        # Create temporary directory with disk quota of 250MB - 10MB overhead from ext2
         temporary_directory = Path(self._exit_stack.enter_context(TemporaryDirectory()))
         storage_file = temporary_directory / 'storage'
-        pb.local['truncate']('-s', '100m', storage_file)  # Create sparse file
+        pb.local['truncate']('-s', '250m', storage_file)  # Create sparse file
         pb.local['mkfs']('-t', 'ext2', '-m', 0, storage_file)
         mount_point = temporary_directory / 'mount_point'
         mount_point.mkdir()

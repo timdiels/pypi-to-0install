@@ -124,6 +124,9 @@ async def convert(context, package, zi_name, old_feed):
             except urllib.error.URLError as ex:
                 finished = False
                 context.feed_logger.warning('Failed to download distribution. Cause: {}'.format(ex))
+            except _UnsupportedDistribution as ex:
+                context.feed_logger.warning('Unsupported distribution: {}'.format(ex.args[0]))
+                blacklist(release_url)
             except _InvalidDistribution as ex:
                 context.feed_logger.warning('Invalid distribution: {}'.format(ex.args[0]))
                 blacklist(release_url)
@@ -165,6 +168,11 @@ class NoValidRelease(Exception):
 
 class _InvalidDistribution(Exception):
     pass
+
+class _UnsupportedDistribution(Exception):
+    '''
+    Valid but unsupported distribution
+    '''
 
 async def _versions(context, package):
     '''
@@ -414,6 +422,8 @@ class _InvalidDownload(Exception):
 
 @async_contextmanager
 async def _unpack_distribution(context, release_url):
+    _check_release_size(release_url)
+
     # Get url
     if context.pypi_mirror:
         url = '{}packages/{}'.format(context.pypi_mirror, release_url['path'])
@@ -468,6 +478,22 @@ async def _unpack_distribution(context, release_url):
 
             # Yield
             yield unpack_directory
+
+def _check_release_size(release_url):
+    '''
+    Check size of release is within supported bounds
+    '''
+    # Get size
+    try:
+        size = int(release_url['size'])
+    except KeyError:
+        raise _InvalidDistribution('release_url["size"] is missing')
+    except ValueError:
+        raise _InvalidDistribution('Invalid release_url["size"]: {!r}'.format(size))
+
+    # Unsupported if larger than 50MB
+    if size > 50 * 2**20:  # assume size is bytes
+        raise _UnsupportedDistribution('Distribution is too large (>50M): {} MB'.format(size / 2**20))
 
 def _digest_of(directory):
     '''
