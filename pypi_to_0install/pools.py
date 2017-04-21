@@ -187,7 +187,11 @@ class QuotaDirectoryPool(object):
     def __exit__(self, exc_type, exc_val, traceback):
         self._exit_stack.close()
 
-    get = _pool_get
+    @contextmanager
+    def get(self):
+        with _pool_get(self) as quota_directory, \
+                TemporaryDirectory(dir=str(quota_directory)) as output_directory:
+            yield Path(output_directory)
 
 class ServerProxyPool(object):
 

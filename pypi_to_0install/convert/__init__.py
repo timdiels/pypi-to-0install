@@ -348,9 +348,7 @@ async def _find_egg_info(context, distribution_directory):
 
     @async_contextmanager
     async def generate_egg_info():
-        with context.pool.quota_directory() as quota_directory, \
-            TemporaryDirectory(dir=str(quota_directory)) as output_directory:
-
+        with context.pool.quota_directory() as output_directory:
             # Prepare output_directory
             output_directory = Path(output_directory)
             distribution_directory_ = output_directory / 'dist'
