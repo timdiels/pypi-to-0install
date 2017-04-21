@@ -1,17 +1,17 @@
 # Copyright (C) 2017 Tim Diels <timdiels.m@gmail.com>
-# 
+#
 # This file is part of PyPI to 0install.
-# 
+#
 # PyPI to 0install is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # PyPI to 0install is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Lesser General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU Lesser General Public License
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -55,14 +55,14 @@ logger = logging.getLogger(__name__)
 async def convert(context, package, zi_name, old_feed):
     '''
     Convert PyPI package to ZI feed
-    
+
     Parameters
     ----------
     context : Context
     package : Package
     zi_name : str
     old_feed : lxml.etree.ElementTree
-    
+
     Returns
     -------
     feed : lxml.etree.ElementTree
@@ -77,22 +77,22 @@ async def convert(context, package, zi_name, old_feed):
     def blacklist(release_url):
         context.feed_logger.warning('Blacklisting distribution, will not retry')
         package.blacklisted_distributions.add(release_url['url'])
-        
+
     @_async_pypi(context)
     def release_data():
         with context.pool.pypi() as pypi:
             return pypi.release_data(package.name, max_version)
-            
+
     @_async_pypi(context)
     def release_urls(py_version):
         with context.pool.pypi() as pypi:
-            return pypi.release_urls(package.name, py_version) 
-        
+            return pypi.release_urls(package.name, py_version)
+
     finished = True
     versions = await _versions(context, package)
     if not versions:
         raise NoValidRelease()
-    
+
     # Create feed with general info based on the latest release_data of the
     # latest version
     py_versions = [pair[0] for pair in versions]
@@ -101,7 +101,7 @@ async def convert(context, package, zi_name, old_feed):
     release_data_['version'] = max_version
     release_data_ = {k:v for k, v in release_data_.items() if v is not None and v != ''}
     feed = _convert_general(context, package.name, zi_name, release_data_)
-    
+
     # Add <implementation>s to feed
     for py_version, zi_version in versions:
         for release_url in await release_urls(py_version):
@@ -109,7 +109,7 @@ async def convert(context, package, zi_name, old_feed):
                 continue
             try:
                 package_type = release_url['packagetype']
-                action = 'Converting' if package_type == 'sdist' else 'Skipping' 
+                action = 'Converting' if package_type == 'sdist' else 'Skipping'
                 context.feed_logger.info('{} {} distribution: {}'.format(action, package_type, release_url['filename']))
                 if action == 'Converting':
                     await _convert_distribution(context, zi_version, feed, old_feed, release_data_, release_url)
@@ -125,17 +125,17 @@ async def convert(context, package, zi_name, old_feed):
             except _InvalidDistribution as ex:
                 context.feed_logger.warning('Invalid distribution: {}'.format(ex.args[0]))
                 blacklist(release_url)
-                
+
     # If no implementations, and we converted all we could, raise it has no release
     if finished and feed.find('{{{}}}implementation'.format(zi_namespaces[None])) is None:
         raise NoValidRelease()
-    
+
     return feed, finished
 
 def _async_pypi(context):
     '''
     Make pypi xmlrpc request async and retry on failure
-    
+
     When call times out, it retries after a delay. Upon the 5th failure,
     PyPITimeout is raised.
     '''
@@ -151,7 +151,7 @@ def _async_pypi(context):
                             'PyPI request timed out, this worker will back off for 5 minutes. '
                             'We may be throttled, consider using less workers to put less load on PyPI'
                         )
-                        await asyncio.sleep(5*60)
+                        await asyncio.sleep(5 * 60)
             raise PyPITimeout('5 consecutive PyPI requests (on this worker) timed out with 5 minutes between each request')
         return decorated
     return decorator
@@ -160,14 +160,14 @@ class NoValidRelease(Exception):
     '''
     When a package has not a single valid release
     '''
-    
+
 class _InvalidDistribution(Exception):
     pass
 
 async def _versions(context, package):
     '''
     Get versions of package
-    
+
     Returns
     -------
     [(py_version :: str, zi_version :: str)]
@@ -192,36 +192,36 @@ async def _versions(context, package):
             )
             package.blacklisted_versions.add(py_version)
     return versions
-    
+
 def _convert_general(context, pypi_name, zi_name, release_data):
     '''
     Populate feed with general info from latest release_data
     '''
     interface = zi.interface(**{
         'uri': context.feed_uri(zi_name),
-        'min-injector-version': '0.48', #TODO check what we use, set accordingly
+        'min-injector-version': '0.48',  # TODO check what we use, set accordingly
     })
     interface.append(zi.name(zi_name))
-    
-    # Note: .get() or 'x' is not the same as .get(, 'x') when value can be '' 
+
+    # Note: .get() or 'x' is not the same as .get(, 'x') when value can be ''
     summary = release_data.get('summary', 'Converted from PyPI; missing summary')
     interface.append(zi.summary(summary))  # Note: required element
-        
+
     homepage = release_data.get('home_page')
     if homepage:
         interface.append(zi.homepage(homepage))
-        
+
     description = release_data.get('description')
     if description:
         description = pypandoc.convert_text(description, format='rst', to='plain')
         interface.append(zi.description(description))
-        
-    #TODO: <category>s from classifiers
-    
+
+    # TODO: <category>s from classifiers
+
     classifiers = release_data.get('classifiers', [])
-    if 'Environment :: Console' in classifiers:  #TODO test
+    if 'Environment :: Console' in classifiers:  # TODO test
         interface.append(zi('needs-terminal'))
-        
+
     return etree.ElementTree(interface)
 
 async def _convert_distribution(context, zi_version, feed, old_feed, release_data, release_url):
@@ -230,20 +230,20 @@ async def _convert_distribution(context, zi_version, feed, old_feed, release_dat
     '''
     # Add from old_feed if it already has it (distributions can be deleted, but not changed or reuploaded)
     implementations = old_feed.xpath('//implementation[@id={!r}]'.format(release_url['path']))
-    if implementations: #TODO test this, e.g. do we have to add xpath(namespaces=nsmap)?
+    if implementations:  # TODO test this, e.g. do we have to add xpath(namespaces=nsmap)?
         context.feed_logger.info('Reusing from old feed')
         feed.append(implementations[0])
         return
-    
+
     # Not in old feed, need to convert.
     async with _unpack_distribution(context, release_url) as unpack_directory:
         distribution_directory = _find_distribution_directory(unpack_directory)
         context.feed_logger.debug('Generating <implementation>')
-        
+
         async with _find_egg_info(context, distribution_directory) as egg_info_directory:
             package = pkginfo.UnpackedSDist(str(egg_info_directory))
             requirements = _convert_dependencies(context, egg_info_directory)
-        
+
         implementation_attributes = dict(
             id=release_url['path'],
             arch='*-src',
@@ -256,10 +256,10 @@ async def _convert_distribution(context, zi_version, feed, old_feed, release_dat
                 if classifier in _languages
             ),
         )
-        
+
         source_implementation_attributes = implementation_attributes.copy()
         del source_implementation_attributes['id']
-        
+
         implementation = zi.implementation(
             implementation_attributes,
             zi('manifest-digest',
@@ -284,14 +284,14 @@ async def _convert_distribution(context, zi_version, feed, old_feed, release_dat
             ),
             *requirements
         )
-        
+
         licenses = sorted(classifier for classifier in package.classifiers if classifier.startswith('License ::'))
         if licenses:
             implementation.set('license', licenses[0])
-        
+
         # Add to feed
         feed.getroot().append(implementation)
-        
+
 def _find_distribution_directory(unpack_directory):
     '''
     Find the directory with setup.py
@@ -307,12 +307,12 @@ def _find_distribution_directory(unpack_directory):
         raise _InvalidDistribution('sdist is a tar bomb. These are unsupported')
     else:
         raise _InvalidDistribution('sdist is empty')
-        
+
 @async_contextmanager
 async def _find_egg_info(context, distribution_directory):
     '''
     Get *.egg-info directory
-    
+
     Parameters
     ----------
     distribution_directory : Path
@@ -327,7 +327,7 @@ async def _find_egg_info(context, distribution_directory):
     '''
     def is_valid(egg_info_directory):
         return (egg_info_directory / 'PKG-INFO').exists()
-    
+
     def try_find_egg_info():
         egg_info_directories = tuple(distribution_directory.glob('*.egg-info'))
         if len(egg_info_directories) == 1:
@@ -335,12 +335,12 @@ async def _find_egg_info(context, distribution_directory):
             if is_valid(egg_info_directory):
                 return egg_info_directory
         return None
-            
+
     @async_contextmanager
     async def generate_egg_info():
         with context.pool.quota_directory() as quota_directory, \
             TemporaryDirectory(dir=str(quota_directory)) as output_directory:
-            
+
             # Prepare output_directory
             output_directory = Path(output_directory)
             distribution_directory_ = output_directory / 'dist'
@@ -350,7 +350,7 @@ async def _find_egg_info(context, distribution_directory):
                 f.write(pkg_resources.resource_string(__name__, 'setuptools_setup.py'))
             (output_directory / 'out').mkdir()
             (output_directory / 'tmp').mkdir()
-            
+
             # Run setup.py egg_info in sandbox, in mem limiting cgroup, with disk
             # quota and 10 sec time limit
             for python in ('python2', 'python3'):
@@ -381,7 +381,7 @@ async def _find_egg_info(context, distribution_directory):
                             with suppress(ProcessLookupError):
                                 process.terminate()
                             raise
-                        
+
                         # Find egg-info
                         egg_info_directory = next((output_directory / 'out').iterdir())
                         if is_valid(egg_info_directory):
@@ -390,14 +390,14 @@ async def _find_egg_info(context, distribution_directory):
                 raise _InvalidDistribution(
                     'No valid *.egg-info directory and setup.py egg_info failed or timed out'
                 )
-    
+
     egg_info_directory = try_find_egg_info()
     if egg_info_directory:
         yield egg_info_directory
     else:
         async with generate_egg_info() as egg_info_directory:
             yield egg_info_directory
-    
+
 def _stability(pypi_version):
     version = parse_version(pypi_version)
     if version.modifiers and version.modifiers[-1].type_ == 'dev':
@@ -406,7 +406,7 @@ def _stability(pypi_version):
         return 'testing'
     else:
         return 'stable'
-        
+
 class _InvalidDownload(Exception):
     pass
 
@@ -417,31 +417,31 @@ async def _unpack_distribution(context, release_url):
         url = '{}packages/{}'.format(context.pypi_mirror, release_url['path'])
     else:
         url = release_url['url']
-    
+
     with NamedTemporaryFile() as f:
         # Download
         context.feed_logger.debug('Downloading {}'.format(url))
         distribution_file = Path(f.name)
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, urlretrieve, url, str(distribution_file))
-    
+
         # Check md5 hash
         expected_digest = release_url['md5_digest']
         if expected_digest:
             # Generate digest
             actual_digest = path_.hash(distribution_file, hashlib.md5).hexdigest()
-            
+
             # If digest differs, raise
             if actual_digest != expected_digest:
                 raise _InvalidDownload(
                     'MD5 digest differs. Got {!r}, expected {!r}'
                     .format(actual_digest, expected_digest)
                 )
-        
+
         # Unpack
         with TemporaryDirectory() as temporary_directory:
             temporary_directory = Path(temporary_directory)
-            
+
             context.feed_logger.debug('Unpacking')
             try:
                 unpack_directory = Path(
@@ -463,10 +463,10 @@ async def _unpack_distribution(context, release_url):
                     print(ex)
                     print(dir(ex))
                     raise
-            
+
             # Yield
             yield unpack_directory
-        
+
 def _digest_of(directory):
     '''
     Get 0install 265new digest of directory
@@ -474,24 +474,24 @@ def _digest_of(directory):
     alg = manifest.get_algorithm('sha256new')
     digest = alg.new_digest()
     for line in alg.generate_manifest(str(directory)):
-        digest.update((line + '\n').encode('utf-8')) 
+        digest.update((line + '\n').encode('utf-8'))
     digest = alg.getID(digest).split('_', maxsplit=1)[1]
     return digest
-    
+
 @attr.s
 class _ZIRequirement(object):
-    
+
     '''
     _convert_dependencies helper class
     '''
-    
-    required = attr.ib()  # True iff importance='required' 
+
+    required = attr.ib()  # True iff importance='required'
     specifiers = attr.ib()  # [(operator :: str, version :: str)]. Python specifier list
-    
+
 def _convert_dependencies(context, egg_info_directory):
     # Parse requirements
     all_requirements = _parse_requirements(egg_info_directory)
-    
+
     # Split into ZI required and recommended
     zi_requirements = defaultdict(lambda: _ZIRequirement(required=False, specifiers=[]))  # pypi_name => ZIRequirement
     extras = [extra for extra in all_requirements if extra is not None]
@@ -513,7 +513,7 @@ def _convert_dependencies(context, egg_info_directory):
             if not requirement.marker and not extra:
                 zi_requirement.required = True
             zi_requirement.specifiers.extend(requirement.specs)
-    
+
     # Convert
     requirements = []
     for pypi_name, zi_requirement in sorted(zi_requirements.items()):
@@ -526,11 +526,11 @@ def _convert_dependencies(context, egg_info_directory):
             requires.set('version', version_expression)
         requirements.append(requires)
     return requirements
-    
+
 def _parse_requirements(egg_info_directory):
     '''
     Get required and optional requirements from egg-info directory
-    
+
     Returns
     -------
     {extra :: str or None : [pkg_resources.Requirement]}
@@ -584,7 +584,7 @@ _languages = {
     'Natural Language :: Macedonian': 'mk',
     'Natural Language :: Malay': 'ms',
     'Natural Language :: Marathi': 'mr',
-    'Natural Language :: Norwegian': 'nb_NO', # there's also nn_NO, so this conversion gets it wrong sometimes
+    'Natural Language :: Norwegian': 'nb_NO',  # there's also nn_NO, so this conversion gets it wrong sometimes
     'Natural Language :: Panjabi': 'pa',
     'Natural Language :: Persian': 'fa_IR',
     'Natural Language :: Polish': 'pl',

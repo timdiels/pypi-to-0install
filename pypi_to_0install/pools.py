@@ -1,17 +1,17 @@
 # Copyright (C) 2017 Tim Diels <timdiels.m@gmail.com>
-# 
+#
 # This file is part of PyPI to 0install.
-# 
+#
 # PyPI to 0install is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # PyPI to 0install is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Lesser General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU Lesser General Public License
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -46,20 +46,20 @@ def _pool_get(self):
         self._available.append(item)
 
 class CgroupsPool(object):
-    
+
     '''
     Pool of cgroups
-    
+
     Each group has a 10MB memory+swap usage limit and has minimal disk IO
     priority.
-    
+
     Examples
     --------
     with CgroupPool as pool:
         with pool.get() as cgroups:
             pass
     '''
-    
+
     def _cgroup_subsystems():  # @NoSelf
         _cgroup_root = Path('/sys/fs/cgroup')
         _cgroup_subsystems = ('memory', 'blkio')  # the cgroup subsystems we use
@@ -67,18 +67,18 @@ class CgroupsPool(object):
             subsystem: _cgroup_root / subsystem / 'pypi_to_0install'
             for subsystem in _cgroup_subsystems
         }
-    _cgroup_subsystems = _cgroup_subsystems() 
-    
+    _cgroup_subsystems = _cgroup_subsystems()
+
     def __init__(self):
         # [Path] all cgroups
         self._all = []
-        
+
         # [[Path]] available cgroups, each [Path] is intended to limit a single process
         self._available = []
-        
+
         # id used in group names of last created pool resource
         self._last_id = 0
-        
+
     def _add(self):
         # Add a cgroup in each subsystem we use
         self._last_id += 1
@@ -98,7 +98,7 @@ class CgroupsPool(object):
                 assert False, 'unused subsystem: {}'.format(subsystem)
             cgroups.append(cgroup)
         self._available.append(cgroups)
-            
+
     async def __aenter__(self):
         # Create pypi_to_0install cgroups
         #
@@ -114,7 +114,7 @@ class CgroupsPool(object):
                 # Insufficient permissions, set owner to current user
                 sudo('chown', user, str(cgroup))
         return self
-                
+
     async def __aexit__(self, exc_type, exc_val, traceback):
         # Try to remove all our cgroups
         await asyncio.gather(
@@ -136,7 +136,7 @@ class CgroupsPool(object):
                     # Else, give up
                     _logger.warning('Could not remove {}'.format(cgroup))
                     return
-            
+
     async def _kill_groups(self, cgroups):
         '''
         Kill any process still using the cgroups
@@ -149,7 +149,7 @@ class CgroupsPool(object):
                 break
             with suppress(asyncio.CancelledError):  # this needs to happen
                 await kill(pids, timeout=2)
-    
+
     @async_contextmanager
     async def get(self):
         with _pool_get(self) as cgroups:
@@ -157,17 +157,17 @@ class CgroupsPool(object):
                 yield cgroups
             finally:
                 await self._kill_groups(cgroups)
-    
+
 class QuotaDirectoryPool(object):
-    
+
     '''
     Pool directories with a ~96MB disk quota
     '''
-    
+
     def __init__(self):
         self._exit_stack = ExitStack()
         self._available = []
-        
+
     def _add(self):
         # Create temporary directory with disk quota of 96MB
         # I.e. 100MB - 4MB overhead from ext2
@@ -181,62 +181,62 @@ class QuotaDirectoryPool(object):
         self._exit_stack.callback(pb.local['sudo'], 'umount', '--force', mount_point)
         pb.local['sudo']('chown', pb.local.env['USER'], mount_point)
         self._available.append(mount_point)
-            
+
     def __enter__(self):
         return self
-                
+
     def __exit__(self, exc_type, exc_val, traceback):
         self._exit_stack.close()
-    
+
     get = _pool_get
-    
+
 class ServerProxyPool(object):
-    
+
     '''
     Pool of xmlrpc server proxies
     '''
-    
+
     def __init__(self, uri):
         self._uri = uri
         self._all = []
         self._available = []
-        
+
     def _add(self):
         self._available.append(ServerProxy(self._uri))
-            
+
     def __enter__(self):
         return self
-                
+
     def __exit__(self, exc_type, exc_val, traceback):
         pass  # TODO cleanup proxies
-    
+
     get = _pool_get
 
 class CombinedPool(object):
-    
+
     def __init__(self, pypi_uri):
         self._cgroups_pool = CgroupsPool()
         self._quota_directory_pool = QuotaDirectoryPool()
         self._pypi_proxy_pool = ServerProxyPool(pypi_uri)
-    
+
     def cgroups(self):
         return self._cgroups_pool.get()
-    
+
     def quota_directory(self):
         return self._quota_directory_pool.get()
-    
+
     def pypi(self):
         '''
         Get ServerProxy of Python index XMLRPC interface
         '''
         return self._pypi_proxy_pool.get()
-    
+
     async def __aenter__(self):
         self._pypi_proxy_pool.__enter__()
         self._quota_directory_pool.__enter__()
         await self._cgroups_pool.__aenter__()
         return self
-    
+
     async def __aexit__(self, exc_type, exc_val, traceback):
         await self._cgroups_pool.__aexit__(exc_type, exc_val, traceback)
         self._quota_directory_pool.__exit__(exc_type, exc_val, traceback)
