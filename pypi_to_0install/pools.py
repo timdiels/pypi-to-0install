@@ -20,6 +20,7 @@ Resource pools
 '''
 
 from pypi_to_0install.various import ServerProxy, kill
+from chicken_turtle_util import path as path_
 from tempfile import TemporaryDirectory
 from contextlib import contextmanager, ExitStack, suppress
 from asyncio_extras.contextmanager import async_contextmanager
@@ -189,9 +190,13 @@ class QuotaDirectoryPool(object):
 
     @contextmanager
     def get(self):
-        with _pool_get(self) as quota_directory, \
-                TemporaryDirectory(dir=str(quota_directory)) as output_directory:
-            yield Path(output_directory)
+        with _pool_get(self) as quota_directory:
+            temporary_directory = quota_directory / 'tmp'
+            temporary_directory.mkdir()
+            try:
+                yield Path(temporary_directory)
+            finally:
+                path_.remove(temporary_directory, force=True)
 
 class ServerProxyPool(object):
 
