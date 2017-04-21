@@ -29,7 +29,6 @@ import asyncio
 import psutil
 import attr
 import re
-import os
 
 _logger = logging.getLogger(__name__)
 zi_namespaces = {
