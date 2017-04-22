@@ -159,11 +159,11 @@ class TestInvalidInput(object):
         Assert convert_specifiers logs warning on given specifier, but continues
         with any other specifiers
         '''
-        caplog_start = len(caplog.records())
+        caplog_start = len(caplog.records)
         actual = convert_specifiers(context, (specifier, ('==', '1')))
 
         # Assert a matching warning message was logged
-        for record in caplog.records()[caplog_start:]:
+        for record in caplog.records[caplog_start:]:
             if record.name != feed_logger_name:
                 continue
             if record.levelname != 'WARNING':
