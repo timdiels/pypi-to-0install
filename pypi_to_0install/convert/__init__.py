@@ -270,10 +270,14 @@ async def _convert_distribution(context, zi_version, feed, old_feed, release_dat
         source_implementation_attributes = implementation_attributes.copy()
         del source_implementation_attributes['id']
 
+        try:
+            digest = _digest_of(unpack_directory)
+        except PermissionError:
+            raise _InvalidDistribution('Distribution contains files/directories without read permission')
         implementation = zi.implementation(
             implementation_attributes,
             zi('manifest-digest',
-                sha256new=_digest_of(unpack_directory)
+                sha256new=digest
             ),
             zi.archive(
                 href=release_url['url'],
