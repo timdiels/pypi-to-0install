@@ -470,9 +470,18 @@ async def _unpack_distribution(context, release_url):
                 if 'unknown archive' in ex.args[0]:
                     raise _InvalidDistribution('Invalid archive or unknown archive format') from ex
                 else:
-                    print(ex)
-                    print(dir(ex))
-                    raise
+                    # Discern between disk full and unknown error
+                    usage = shutil.disk_usage(str(temporary_directory))
+                    is_full = usage.free < 5 * 2**20  # i.e. iff less than 5MB free
+                    if is_full:
+                        raise _UnsupportedDistribution(
+                            'Unpacked distribution exceeds disk quota of {}MB'
+                            .format(round(usage.total / 2**20))
+                        )
+                    else:
+                        raise _InvalidDistribution(
+                            'Cannot unpack distribution: {}'.format(ex)
+                        ) from ex
 
             # Yield
             yield unpack_directory
