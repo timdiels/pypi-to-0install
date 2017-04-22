@@ -21,7 +21,6 @@ from pypi_to_0install.various import (
 from pypi_to_0install import parallel
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-import plumbum as pb
 import asyncio
 import logging
 import pickle

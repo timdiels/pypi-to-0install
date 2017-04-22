@@ -251,7 +251,10 @@ async def _convert_distribution(context, zi_version, feed, old_feed, release_dat
         context.feed_logger.debug('Generating <implementation>')
 
         async with _find_egg_info(context, distribution_directory) as egg_info_directory:
-            package = pkginfo.UnpackedSDist(str(egg_info_directory))
+            try:
+                package = pkginfo.UnpackedSDist(str(egg_info_directory))
+            except ValueError as ex:
+                raise _InvalidDistribution("Invalid egg-info: " + ex.args[0]) from ex
             requirements = _convert_dependencies(context, egg_info_directory)
 
         implementation_attributes = dict(
