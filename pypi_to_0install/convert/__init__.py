@@ -277,6 +277,10 @@ async def _convert_distribution(context, zi_version, feed, old_feed, release_dat
             digest = _digest_of(unpack_directory)
         except PermissionError:
             raise _InvalidDistribution('Distribution contains files/directories without read permission')
+        except UnicodeEncodeError as ex:
+            raise _UnsupportedDistribution(
+                'Distribution triggers error in (old) 0install digest algorithm: ' + ex.args[0]
+            )
         implementation = zi.implementation(
             implementation_attributes,
             zi('manifest-digest',
