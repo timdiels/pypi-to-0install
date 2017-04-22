@@ -19,10 +19,6 @@ import attr
 from ._version import parse_version, Modifier, InvalidVersion, Version
 from zeroinstall.injector.versions import parse_version as zi_parse_version
 
-class _EmptyRange(object):
-    pass
-_empty_range = _EmptyRange()
-
 def convert_specifiers(context, specifiers):
     '''
     Convert Python version specifiers to ZI constraints
@@ -41,8 +37,15 @@ def convert_specifiers(context, specifiers):
     if not ast:
         return None
     ast = _remove_and(ast)
+    if ast == _empty_range:
+        raise EmptyRangeConversion()
     ast = _simplify(ast)
     return ast.format_zi()
+
+class EmptyRangeConversion(Exception):
+
+    def __init__(self):
+        super().__init__('Empty range cannot be represented as ZI constraint')
 
 class AST(object):
 
@@ -155,6 +158,11 @@ class _Range(AST):
 
     def __str__(self):
         return self.format_zi()
+
+class _EmptyRange(AST):
+    def format_zi(self):
+        raise Exception('_EmptyRange cannot be formatted as ZI constraint')
+_empty_range = _EmptyRange()
 
 @attr.s(frozen=True)
 class _NotVersion(AST):
@@ -381,7 +389,7 @@ def _remove_and(ast):
 
     Returns
     -------
-    _Or
+    _Or or _EmptyRange
         Root of AST with all _And removed
     '''
     if isinstance(ast, _And):
@@ -395,7 +403,10 @@ def _remove_and(ast):
             # to
             # ((r1 & r3) | (r1 & r4) | (r2 & r3) | (r2 & r4) ...)
             ranges = (range1 & range2 for range1 in left.ranges for range2 in right.ranges)
-            left = _Or(range_ for range_ in ranges if range_ != _empty_range)
+            ranges = [range_ for range_ in ranges if range_ != _empty_range]
+            if not ranges:
+                return _empty_range
+            left = _Or(ranges)
         return left
     elif isinstance(ast, _Range):
         return _Or((ast,))

@@ -23,7 +23,7 @@ import pytest
 from packaging.specifiers import SpecifierSet
 from pkg_resources import Requirement
 from zeroinstall.injector.versions import parse_version_expression, parse_version as zi_parse_version
-from pypi_to_0install.convert._specifiers import convert_specifiers
+from pypi_to_0install.convert._specifiers import convert_specifiers, EmptyRangeConversion
 from pypi_to_0install.convert._version import parse_version
 from .common import convert_version
 import logging
@@ -252,9 +252,13 @@ def test_simplified(context, specifiers, expected):
 
 def test_regression(context):
     '''
-    Regression tests
+    Regression test
     '''
     # This used to raise ValueError('Range cannot be empty')
     specifiers = [('>=', '1.6.0'), ('!=', '2.1.0'), ('!=', '1.8.0')]
     expected = '0-1.6-4..!0-1.8-4 | 0-1.8-4-1..!0-2.1-4 | 0-2.1-4-1..'
     assert convert_specifiers(context, specifiers) == expected
+
+def test_regression2(context):
+    with pytest.raises(EmptyRangeConversion):
+        assert convert_specifiers_(context, '>=3.4,<3.4') is None

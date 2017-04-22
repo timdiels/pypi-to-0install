@@ -19,7 +19,7 @@ from pypi_to_0install.various import (
     zi, zi_namespaces, canonical_name, PyPITimeout, kill
 )
 from ._version import parse_version, InvalidVersion
-from ._specifiers import convert_specifiers
+from ._specifiers import convert_specifiers, EmptyRangeConversion
 from chicken_turtle_util import path as path_
 from contextlib import suppress, ExitStack
 from patoolib import extract_archive
@@ -547,7 +547,13 @@ def _convert_dependencies(context, egg_info_directory):
             interface=context.feed_uri(canonical_name(pypi_name)),
             importance='essential' if zi_requirement.required else 'recommended'
         )
-        version_expression = convert_specifiers(context, zi_requirement.specifiers)
+        try:
+            version_expression = convert_specifiers(context, zi_requirement.specifiers)
+        except EmptyRangeConversion:
+            raise _InvalidDistribution(
+                'Requirement {!r} (pypi name) constrains to an empty range '
+                'and can never be satisfied'.format(pypi_name)
+            )
         if version_expression:
             requires.set('version', version_expression)
         requirements.append(requires)
