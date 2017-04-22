@@ -320,10 +320,13 @@ def _find_distribution_directory(unpack_directory):
     children = list(unpack_directory.iterdir())
     if len(children) == 1:
         distribution_directory = children[0]
-        if (distribution_directory / 'setup.py').exists():
-            return distribution_directory
-        else:
-            raise _InvalidDistribution('Could not find setup.py')
+        try:
+            if (distribution_directory / 'setup.py').exists():
+                return distribution_directory
+            else:
+                raise _InvalidDistribution('Could not find setup.py')
+        except PermissionError:
+            raise _InvalidDistribution('No read permission on setup.py')
     elif children:
         raise _InvalidDistribution('sdist is a tar bomb')
     else:
