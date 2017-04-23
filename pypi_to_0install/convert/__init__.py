@@ -16,7 +16,7 @@
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
 from pypi_to_0install.various import (
-    zi, zi_namespaces, canonical_name, PyPITimeout, kill
+    zi, zi_namespaces, canonical_name, PyPITimeout, kill, CalledProcessError
 )
 from ._version import parse_version, InvalidVersion
 from ._specifiers import convert_specifiers, EmptyRangeConversion
@@ -37,7 +37,6 @@ import urllib.error
 import pkg_resources
 import contextlib
 import subprocess
-import pypandoc
 import patoolib
 import pkginfo
 import logging
@@ -100,7 +99,7 @@ async def convert(context, package, zi_name, old_feed):
     release_data_ = await release_data()
     release_data_['version'] = max_version
     release_data_ = {k:v for k, v in release_data_.items() if v is not None and v != ''}
-    feed = _convert_general(context, package.name, zi_name, release_data_)
+    feed = await _convert_general(context, package.name, zi_name, release_data_)
 
     # Add <implementation>s to feed
     for py_version, zi_version in versions:
@@ -203,7 +202,7 @@ async def _versions(context, package):
             package.blacklisted_versions.add(py_version)
     return versions
 
-def _convert_general(context, pypi_name, zi_name, release_data):
+async def _convert_general(context, pypi_name, zi_name, release_data):
     '''
     Populate feed with general info from latest release_data
     '''
@@ -223,7 +222,7 @@ def _convert_general(context, pypi_name, zi_name, release_data):
 
     description = release_data.get('description')
     if description:
-        description = pypandoc.convert_text(description, format='rst', to='plain')
+        description = await _try_convert_description(context, description)
         interface.append(zi.description(description))
 
     # TODO: <category>s from classifiers
@@ -233,6 +232,50 @@ def _convert_general(context, pypi_name, zi_name, release_data):
         interface.append(zi('needs-terminal'))
 
     return etree.ElementTree(interface)
+
+async def _try_convert_description(context, description):
+    '''
+    Convert description to ZI description.
+
+    If conversion times out or fails, return unconverted.
+    '''
+    args = ('pandoc', '--from', 'rst', '--to', 'plain')
+    process = await asyncio.create_subprocess_exec(
+        *args,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
+    async def kill_process():
+        with suppress(ProcessLookupError):
+            process.terminate()
+        await kill([process.pid], timeout=1)
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(description.encode()),
+            timeout=1  # second
+        )
+    except asyncio.TimeoutError:
+        # Note: it turns out it's possible to write descriptions that (seem to)
+        # take forever to convert
+        context.feed_logger.warning('Could not convert description: timed out')
+        await kill_process()
+        return description
+    except Exception as ex:
+        context.feed_logger.warning('Could not convert description', exc_info=True)
+        await kill_process()
+        return description
+    finally:
+        await process.wait()
+    if process.returncode == 0:
+        description = stdout.decode()
+    else:
+        context.feed_logger.warning(
+            'Could not convert description: {}'.format(
+                CalledProcessError(process.returncode, args, stdout, stderr)
+            )
+        )
+    return description
 
 async def _convert_distribution(context, zi_version, feed, old_feed, release_data, release_url):
     '''
