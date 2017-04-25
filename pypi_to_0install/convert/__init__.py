@@ -49,7 +49,6 @@ import time
 
 _setup_py_profile_file = Path(resource_filename(__name__, 'setup_py_firejail.profile')).absolute()
 _setup_py_firejail_sh = Path(resource_filename(__name__, 'setup_py_firejail.sh')).absolute()
-logger = logging.getLogger(__name__)
 
 async def convert(context, package, zi_name, old_feed):
     '''
@@ -261,7 +260,7 @@ async def _try_convert_description(context, description):
         context.feed_logger.warning('Could not convert description: timed out')
         await kill_process()
         return description
-    except Exception as ex:
+    except Exception:
         context.feed_logger.warning('Could not convert description', exc_info=True)
         await kill_process()
         return description

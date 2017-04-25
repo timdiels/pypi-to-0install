@@ -28,7 +28,7 @@ import attr
 import sys
 import os
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 def update(context, worker_count):
     # Load state
@@ -36,7 +36,7 @@ def update(context, worker_count):
     state = _State.load()
 
     # Get list of changed packages
-    logger.info('Getting changelog from PyPI')
+    _logger.info('Getting changelog from PyPI')
     with ServerProxy(context.pypi_uri) as pypi:
         newest_serial = pypi.changelog_last_serial()
         if not state.last_serial:
@@ -59,11 +59,11 @@ def update(context, worker_count):
     with state:  # save on exit
         # Return if no changes
         if not state.changed:
-            logger.info('Nothing changed')
+            _logger.info('Nothing changed')
             return
 
         # Update/create feeds for changed packages, with a pool of worker processes
-        logger.debug('Updating feeds with {} workers'.format(worker_count))
+        _logger.debug('Updating feeds with {} workers'.format(worker_count))
         loop = asyncio.get_event_loop()
         executor = ThreadPoolExecutor(worker_count * 5)
         loop.set_default_executor(executor)
@@ -106,10 +106,10 @@ class _State(object):
             )
 
     def save(self):
-        logger.info('Saving')
+        _logger.info('Saving')
         with atomic_write(_State._file) as f:
             pickle.dump(self, f)
-        logger.info('Saved')
+        _logger.info('Saved')
 
     def __enter__(self):
         return self

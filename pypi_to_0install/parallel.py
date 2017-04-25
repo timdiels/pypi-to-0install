@@ -27,7 +27,7 @@ import logging
 import asyncio
 import sys
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 async def update(context, worker_count, state):
     '''
@@ -64,10 +64,10 @@ def _exit_on_error():
     except asyncio.CancelledError:
         raise
     except Exception:
-        logger.exception('Unhandled error occurred')
+        _logger.exception('Unhandled error occurred')
     finally:
         if errored_:
-            logger.error('There were errors, programmer required, see exception(s) in log')
+            _logger.error('There were errors, programmer required, see exception(s) in log')
             sys.exit(3)
 
 async def _check_gpg_signing():
@@ -90,7 +90,7 @@ async def _check_gpg_signing():
             Path(f.name).unlink()
     except subprocess.CalledProcessError as ex:
         # It doesn't work
-        logger.error(
+        _logger.error(
             'Failed to sign test feed, likely cause: no secret gpg key found.\n\n'
             + indent(str(ex), ' ' * 4)
         )

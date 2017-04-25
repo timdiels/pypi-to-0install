@@ -30,7 +30,7 @@ import logging
 import asyncio
 import attr
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 @attr.s(frozen=True, slots=True, cmp=False, hash=False)
 class WorkerContext(object):
@@ -127,7 +127,7 @@ async def update_feed(context, pool, package, errored):
         except asyncio.CancelledError:
             raise
         except PyPITimeout as ex:
-            logger.error(ex.args[0] + '. PyPI may be having issues or may be blocking us. Giving up')
+            _logger.error(ex.args[0] + '. PyPI may be having issues or may be blocking us. Giving up')
             async_cancel()
             raise asyncio.CancelledError
         except Exception:

@@ -34,7 +34,7 @@ import sys
 import os
 import re
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 def _default_workers():
     cpu_count = None
@@ -91,14 +91,14 @@ def main(workers, pypi_mirror, verbosity):
     try:
         update(context, workers)
     finally:
-        logger.info('Exited cleanly')
+        _logger.info('Exited cleanly')
 
 def set_signal_handlers():
     cancellation_signals = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
 
     # Clean exit on cancellation
     def cancel(signal_, frame):
-        logger.info('Cancelling')
+        _logger.info('Cancelling')
         sys.exit(2)
     for signal_ in cancellation_signals:
         signal.signal(signal_, cancel)
