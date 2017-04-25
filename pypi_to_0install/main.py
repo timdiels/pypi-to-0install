@@ -17,17 +17,14 @@
 
 '''
 CLI interface; signals setup
-
-Entry point of the main process
 '''
 
-from pypi_to_0install.various import async_cancel
+from pypi_to_0install.various import ExitCode, cancellation_signals, handle_unhandled_error
 from pypi_to_0install.update import update
 from pypi_to_0install.context import Context
 from pypi_to_0install import logging as logging_
 from pathlib import Path
 import logging
-import asyncio
 import signal
 import click
 import sys
@@ -76,7 +73,17 @@ def main(workers, pypi_mirror, verbosity):
     '''
     Update/create feeds
 
-    Exit codes: 0=success, 1=generic error, 2=cancel, 3=unhandled error
+    Exit codes:
+        0
+            Success
+        1
+            Error. Something went wrong, this was taken into account during
+            development and is likely not a bug.
+        2
+            Cancelled, by user, signal or timeout
+        3
+            Unhandled error. An error that was overlooked during development
+            occurred, this may be a bug.
     '''
     context = Context(
         pypi_uri='https://pypi.python.org/pypi',
@@ -85,30 +92,22 @@ def main(workers, pypi_mirror, verbosity):
     )
 
     logging_.configure(verbosity)
-    set_signal_handlers()
+
+    # Clean exit on cancellation signal
+    def cancel(signal_, frame):
+        _logger.info('Cancelling')
+        sys.exit(ExitCode.cancellation)
+    for signal_ in cancellation_signals:
+        signal.signal(signal_, cancel)
 
     # Run
     try:
         update(context, workers)
+    except Exception:
+        _logger.exception('There was an unhandled error, this may be a bug')
+        sys.exit(ExitCode.unhandled_error)
     finally:
         _logger.info('Exited cleanly')
-
-def set_signal_handlers():
-    cancellation_signals = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
-
-    # Clean exit on cancellation
-    def cancel(signal_, frame):
-        _logger.info('Cancelling')
-        sys.exit(2)
-    for signal_ in cancellation_signals:
-        signal.signal(signal_, cancel)
-
-    # Switch to asyncio cancel handlers as soon as asyncio loop starts
-    loop = asyncio.get_event_loop()
-    def set_handlers():
-        for signal_ in cancellation_signals:
-            loop.add_signal_handler(signal_, async_cancel)
-    loop.call_soon(set_handlers)
 
 if __name__ == '__main__':
     main()

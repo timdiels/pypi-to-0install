@@ -22,10 +22,12 @@ from xmlrpc.client import ServerProxy
 from textwrap import indent, dedent
 from functools import partial
 from pathlib import Path
+from enum import IntEnum
 import subprocess
 import logging
-import shutil
 import asyncio
+import signal
+import shutil
 import psutil
 import attr
 import re
@@ -36,9 +38,15 @@ zi_namespaces = {
     'compile': 'http://zero-install.sourceforge.net/2006/namespaces/0compile'
 }
 zi = ElementMaker(namespace=zi_namespaces[None], nsmap=zi_namespaces)
-
 ServerProxy = partial(ServerProxy, use_datetime=True)
 feeds_directory = Path('feeds').absolute()
+cancellation_signals = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
+
+class ExitCode(IntEnum):
+    success = 0
+    error = 1
+    cancellation = 2
+    unhandled_error = 3
 
 def canonical_name(pypi_name):
     '''
@@ -75,18 +83,6 @@ def atomic_write(destination, mode='w+b'):  # TODO move to CTU project
         f.close()
         Path(f.name).unlink()
         raise
-
-def print_memory_usage():
-    '''
-    Print memory usage for debugging
-    '''
-    from pympler import muppy, summary
-    summary.print_(summary.summarize(muppy.get_objects()))
-
-async def sign_feed(path):
-    await check_call(
-        '0launch', 'http://0install.net/2006/interfaces/0publish', '--xmlsign', str(path)
-    )
 
 class CalledProcessError(subprocess.CalledProcessError):
 
@@ -144,11 +140,6 @@ async def check_call(*args):
 
 class PyPITimeout(Exception):
     pass
-
-def async_cancel():
-    _logger.info('Cancelling')
-    for task in asyncio.Task.all_tasks():
-        task.cancel()
 
 async def kill(pids, timeout):
     '''

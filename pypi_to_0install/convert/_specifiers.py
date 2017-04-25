@@ -17,7 +17,6 @@
 
 import attr
 from ._version import parse_version, Modifier, InvalidVersion, Version
-from zeroinstall.injector.versions import parse_version as zi_parse_version
 
 def convert_specifiers(context, specifiers):
     '''
@@ -200,7 +199,7 @@ def _specifiers_to_ast(context, specifiers):
     # Convert specifiers
     for operator, version in specifiers:
         def _log_invalid_specifier(reason):
-            context.feed_logger.warning(
+            context.logger.warning(
                 "Ignoring invalid specifier: '{}{}'. {}"
                 .format(operator, version, reason)
             )

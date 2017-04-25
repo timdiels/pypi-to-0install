@@ -31,7 +31,7 @@ import attr
 
 feed_logger_name = __name__ + ':feed_logger'
 
-Context = attr.make_class('Context', ['feed_logger'])
+Context = attr.make_class('Context', ['logger'])
 
 @pytest.fixture
 def context():
