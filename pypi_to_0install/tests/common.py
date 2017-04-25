@@ -16,6 +16,8 @@
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
 from pypi_to_0install.convert._version import parse_version
+import asyncio
+import pytest
 
 def convert_version(version):
     '''

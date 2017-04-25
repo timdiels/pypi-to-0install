@@ -26,6 +26,14 @@ import asyncio
 async def convert_general(context, pypi_name, release_data):
     '''
     Create feed with general info from latest release_data
+
+    Parameters
+    ----------
+    context : FeedContext
+    pypi_name : str
+        PyPI name of package
+    release_data : dict
+        Result from xmlrpc release_data call for package
     '''
     interface = zi.interface(**{
         'uri': context.feed_uri(context.zi_name),
@@ -33,7 +41,9 @@ async def convert_general(context, pypi_name, release_data):
     })
     interface.append(zi.name(context.zi_name))
 
-    summary = release_data.get('summary', 'Converted from PyPI; missing summary')
+    summary = release_data.get('summary')
+    if not summary:
+        summary = 'Converted from PyPI; missing summary'
     interface.append(zi.summary(summary))  # Note: required element
 
     homepage = release_data.get('home_page')
@@ -47,8 +57,8 @@ async def convert_general(context, pypi_name, release_data):
 
     # TODO: <category>s from classifiers
 
-    classifiers = release_data.get('classifiers', [])
-    if 'Environment :: Console' in classifiers:  # TODO test
+    classifiers = release_data.get('classifiers')
+    if classifiers and 'Environment :: Console' in classifiers:
         interface.append(zi('needs-terminal'))
 
     return etree.ElementTree(interface)
