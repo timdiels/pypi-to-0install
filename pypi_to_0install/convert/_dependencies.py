@@ -15,10 +15,8 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
-from pypi_to_0install.various import (
-    zi, canonical_name
-)
-from ._various import InvalidDistribution
+from pypi_to_0install.various import zi, canonical_name
+from ._various import InvalidDistribution, UnsupportedDistribution
 from ._specifiers import convert_specifiers, EmptyRangeConversion
 from collections import defaultdict
 import pkg_resources
@@ -31,8 +29,7 @@ def convert_dependencies(context, egg_info_directory):
     # Parse requirements
     all_requirements = _parse_requirements(egg_info_directory)
 
-    # Split into ZI required and recommended
-    zi_requirements = defaultdict(lambda: _ZIRequirement(required=False, specifiers=[]))  # pypi_name => ZIRequirement
+    # Warn about any extras and conditional requirements
     extras = [extra for extra in all_requirements if extra is not None]
     if extras:
         context.logger.warning(
@@ -43,6 +40,10 @@ def convert_dependencies(context, egg_info_directory):
         )
     if any(':' in extra for extra in extras):
         context.logger.warning('Some extras have environment markers. Environment markers are ignored.')
+
+    # Merge extras and required dependencies, intersecting specifiers for
+    # dependencies which appear in multiple places
+    zi_requirements = defaultdict(lambda: _ZIRequirement(required=False, specifiers=[]))  # pypi_name => ZIRequirement
     for extra, requirements in all_requirements.items():
         for requirement in requirements:
             # Note: requirement.key appears to be the name of extra, so can be ignored without warning
@@ -84,8 +85,10 @@ def _parse_requirements(egg_info_directory):
         ``extras_require[None]=required_dependencies`.
     '''
     all_requirements = defaultdict(list)
-    for name in 'requires.txt', 'depends.txt':
-        dependencies_file = egg_info_directory / name
+    dependencies_files = [egg_info_directory / name for name in ('requires.txt', 'depends.txt')]
+    if all(file.exists() for file in dependencies_files):
+        raise UnsupportedDistribution('Egg info has both a requires.txt and depends.txt file')
+    for dependencies_file in dependencies_files:
         if dependencies_file.exists():
             for extra, requirements in pkg_resources.split_sections(dependencies_file.read_text().splitlines()):
                 try:
