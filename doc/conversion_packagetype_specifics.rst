@@ -157,9 +157,64 @@ be easier to tackle them when real life cases arise where this forms a problem):
 
 Wheel
 -----
-Not supported.
 
-Notes:
+Python, ABI, platform tag conversion
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- todo:
+
+  platform tag
+      simply the platform, e.g. linux_x86_64
+  Each python <impl> supports one or more python, abi tags
+      and when py23 is supported, so should py2
+  
+  Note: can't use ZI platform as python platform includes virtual
+  machine platforms like java.
+  
+  Beware of special values such as abi=none.
+  Tags are encoded as version numbers.
+  
+  Similarly to the above, we have a feed for python and platform tags each.
+  
+  Split compressed tags into their full list of tags according to
+  https://www.python.org/dev/peps/pep-0425/#compressed-tag-sets
+  
+  pip actually prefers installing the most specific match. E.g. see
+  this list for an example of its preferences
+  https://www.python.org/dev/peps/pep-0425/#id1
+  
+  We may be able to encode the tags into versions in such a way that
+  version ordering prefers packages in a similar way.
+
+Some wheels need to match the ABI of the Python interpreter (to name just one
+constraint). Ideally the wheel with the most specific ABI and architecture that
+matches the selected interpreter is used. This is converted as follows:
+
+- python.xml: manually written feed containing CPython, PyPy, ...::
+
+      <implementation ...>
+          <require interface="python_abi.xml" version="0|1|2|4|...">
+          ...
+
+- python_abi.xml: manually written::
+
+      <implementation id='py3_3' version='2'/>
+      <implementation id='py3' version='1'/>
+      <implementation id='none' version='0'/>
+      ...
+
+- a_pypi_package.xml::
+
+      <impl> <!-- some wheel -->
+          <require interface=python_abi.xml version="1|2">
+
+Versions encode ABI names such as 'py3'. Version numbers are chosen such that
+more specific ABIs will be chosen when possible. The ABI implementations are
+empty as they only serve to constrain which implementations may be selected.
+The Python implementation provides ABIs py3_3, py3 and the special 'none' for
+those wheels which do not care about the ABI.
+
+Notes
+^^^^^
 
 - ``release_urls['packagetype'] == 'bdist_wheel'``
 
