@@ -18,5 +18,8 @@ Pympler==0.5
 pytest==3.0.6
 pytest-asyncio==0.5.0
 pytest-catchlog==1.2.2
+pytest-localserver==0.3.7
+pytest-mock==1.6.0
 requests==2.13.0
 six==1.10.0
+Werkzeug==0.12.1

@@ -126,12 +126,13 @@ async def _convert_distribution(context, feed, old_feed, release_data, release_u
     package_type = release_url['packagetype']
     if package_type == 'sdist':
         context.logger.info('Converting {} distribution: {}'.format(package_type, release_url['filename']))
-        await convert_sdist(context, zi_version, feed, old_feed, release_data, release_url)
+        implementation = await convert_sdist(context, zi_version, feed, release_data, release_url)
     else:
         raise UnsupportedDistribution(
             'Unsupported package type: {!r} for release: {}'
             .format(package_type, release_url['filename'])
         )
+    feed.getroot().append(implementation)
 
 async def _versions(context, package):
     '''

@@ -16,8 +16,7 @@
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
 from pypi_to_0install.convert._version import parse_version
-import asyncio
-import pytest
+from lxml import etree  # @UnresolvedImport
 
 def convert_version(version):
     '''
@@ -25,3 +24,11 @@ def convert_version(version):
     '''
     version = parse_version(version)
     return version.format_zi()
+
+def assert_xml_equals(actual, expected):
+    '''
+    actual : lxml.etree._Element or _ElementTree
+    expected : str
+    '''
+    actual = etree.tostring(actual, pretty_print=True).decode()
+    assert actual == expected

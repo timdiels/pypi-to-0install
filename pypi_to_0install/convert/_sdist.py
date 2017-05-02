@@ -41,9 +41,9 @@ import shutil
 _setup_py_profile_file = Path(resource_filename(__name__, 'setup_py_firejail.profile')).absolute()
 _setup_py_firejail_sh = Path(resource_filename(__name__, 'setup_py_firejail.sh')).absolute()
 
-async def convert_sdist(context, zi_version, feed, old_feed, release_data, release_url):
+async def convert_sdist(context, zi_version, release_data, release_url):
     '''
-    Append <implementation> to feed, converted from distribution
+    Convert distribution to <implementation>
     '''
     async with _unpack_distribution(context, release_url) as unpack_directory:
         distribution_directory = _find_distribution_directory(unpack_directory)
@@ -76,7 +76,8 @@ async def convert_sdist(context, zi_version, feed, old_feed, release_data, relea
             implementation_attributes['license'] = license_
 
         source_implementation_attributes = implementation_attributes.copy()
-        del source_implementation_attributes['id']
+        for attribute in ('id', 'arch'):
+            del source_implementation_attributes[attribute]
 
         try:
             digest = digest_of(unpack_directory)
@@ -112,8 +113,8 @@ async def convert_sdist(context, zi_version, feed, old_feed, release_data, relea
             *requirements
         )
 
-        # Add implementation to feed
-        feed.getroot().append(implementation)
+        #
+        return implementation
 
 def _find_distribution_directory(unpack_directory):
     '''

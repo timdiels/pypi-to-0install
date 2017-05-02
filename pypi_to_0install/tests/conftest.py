@@ -15,6 +15,7 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
+from pypi_to_0install.pools import CombinedPool
 from packaging.version import Version, parse as py_parse_version
 from itertools import product
 import logging
@@ -73,6 +74,13 @@ def versions():
         assert isinstance(py_parse_version(version), Version)
 
     return versions
+
+@pytest.fixture
+def pool():
+    '''
+    Only one test at a time can use this pool, so do not use xdist
+    '''
+    return CombinedPool('https://pypi.python.org/pypi')
 
 @pytest.fixture(autouse=True)
 def init_logging():

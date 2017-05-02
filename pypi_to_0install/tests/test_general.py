@@ -19,9 +19,9 @@
 Test pypi_to_0install.convert._general.convert_general
 '''
 
+from .common import assert_xml_equals
 from pypi_to_0install.convert._general import convert_general
 from textwrap import dedent
-from lxml import etree  # @UnresolvedImport
 import logging
 import pytest
 import attr
@@ -63,21 +63,13 @@ def release_data():
         'classifiers': ['Framework :: Bob', 'Framework :: Chandler'],
     }
 
-def assert_feed_equals(actual, expected):
-    '''
-    actual : lxml.etree._ElementTree
-    expected : str
-    '''
-    actual = etree.tostring(actual, pretty_print=True).decode()
-    assert actual == expected
-
 @pytest.mark.asyncio
 async def test_happy_days(context, pypi_name, release_data):
     '''
     When all valid input, output expected xml
     '''
     feed = await convert_general(context, pypi_name, release_data)
-    assert_feed_equals(feed, dedent('''\
+    assert_xml_equals(feed, dedent('''\
         <interface xmlns:compile="http://zero-install.sourceforge.net/2006/namespaces/0compile" xmlns="http://zero-install.sourceforge.net/2004/injector/interface" uri="http://feeds.example.com/pkg_name" min-injector-version="0.48">
           <name>pkg_name</name>
           <summary>The summary</summary>
@@ -112,7 +104,7 @@ class TestInvalidAttribute(object):
         '''
         invalidate_release_data(release_data, 'summary', missing, invalid_value)
         feed = await convert_general(context, pypi_name, release_data)
-        assert_feed_equals(feed, dedent('''\
+        assert_xml_equals(feed, dedent('''\
             <interface xmlns:compile="http://zero-install.sourceforge.net/2006/namespaces/0compile" xmlns="http://zero-install.sourceforge.net/2004/injector/interface" uri="http://feeds.example.com/pkg_name" min-injector-version="0.48">
               <name>pkg_name</name>
               <summary>Converted from PyPI; missing summary</summary>
@@ -135,7 +127,7 @@ class TestInvalidAttribute(object):
         '''
         invalidate_release_data(release_data, 'home_page', missing, invalid_value)
         feed = await convert_general(context, pypi_name, release_data)
-        assert_feed_equals(feed, dedent('''\
+        assert_xml_equals(feed, dedent('''\
             <interface xmlns:compile="http://zero-install.sourceforge.net/2006/namespaces/0compile" xmlns="http://zero-install.sourceforge.net/2004/injector/interface" uri="http://feeds.example.com/pkg_name" min-injector-version="0.48">
               <name>pkg_name</name>
               <summary>The summary</summary>
@@ -157,7 +149,7 @@ class TestInvalidAttribute(object):
         '''
         invalidate_release_data(release_data, 'description', missing, invalid_value)
         feed = await convert_general(context, pypi_name, release_data)
-        assert_feed_equals(feed, dedent('''\
+        assert_xml_equals(feed, dedent('''\
             <interface xmlns:compile="http://zero-install.sourceforge.net/2006/namespaces/0compile" xmlns="http://zero-install.sourceforge.net/2004/injector/interface" uri="http://feeds.example.com/pkg_name" min-injector-version="0.48">
               <name>pkg_name</name>
               <summary>The summary</summary>
@@ -178,7 +170,7 @@ async def test_invalid_classifiers(context, pypi_name, release_data, missing, in
     '''
     invalidate_release_data(release_data, 'classifiers', missing, invalid_value)
     feed = await convert_general(context, pypi_name, release_data)
-    assert_feed_equals(feed, dedent('''\
+    assert_xml_equals(feed, dedent('''\
         <interface xmlns:compile="http://zero-install.sourceforge.net/2006/namespaces/0compile" xmlns="http://zero-install.sourceforge.net/2004/injector/interface" uri="http://feeds.example.com/pkg_name" min-injector-version="0.48">
           <name>pkg_name</name>
           <summary>The summary</summary>
@@ -201,7 +193,7 @@ async def test_terminal(context, pypi_name, release_data):
     '''
     release_data['classifiers'].append('Environment :: Console')
     feed = await convert_general(context, pypi_name, release_data)
-    assert_feed_equals(feed, dedent('''\
+    assert_xml_equals(feed, dedent('''\
         <interface xmlns:compile="http://zero-install.sourceforge.net/2006/namespaces/0compile" xmlns="http://zero-install.sourceforge.net/2004/injector/interface" uri="http://feeds.example.com/pkg_name" min-injector-version="0.48">
           <name>pkg_name</name>
           <summary>The summary</summary>

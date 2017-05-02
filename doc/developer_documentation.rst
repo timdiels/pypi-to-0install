@@ -7,4 +7,7 @@ you do not download all of PyPI more than once. You can set it up with
 For tests, set PYTHONPATH as in the regular run instructions, then run
 ``pytest``.
 
+Tests cannot be run concurrently, for example only one CgroupsPool can be
+active at a time.
+
 .. _bandersnatch: https://pypi.python.org/pypi/bandersnatch
