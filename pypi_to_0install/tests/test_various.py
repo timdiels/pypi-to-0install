@@ -19,7 +19,7 @@
 Test pypi_to_0install.convert._various
 '''
 
-from pypi_to_0install.convert._various import stability
+from pypi_to_0install.convert._various import stability, license
 import pytest
 
 @pytest.mark.parametrize('version, expected', [
@@ -36,3 +36,18 @@ def test_stability(version, expected):
     Otherwise, stability is stable.
     '''
     assert stability(version) == expected
+
+@pytest.mark.parametrize('classifiers, expected', [
+    ([], None),
+    (['Natural Language :: Latvian'], None),
+    (['License :: Freeware'], 'License :: Freeware'),
+    (['License :: DFSG approved', 'License :: Freeware'], 'License :: DFSG approved'),
+    (['License :: Freeware', 'License :: DFSG approved'], 'License :: DFSG approved'),  # deterministic through sorting
+])
+def test_license(classifiers, expected):
+    '''
+    Derive license Trove classifier. If License :: is in classifiers, it is
+    used. If there are multiple, pick one in a deterministic fashion. Else, omit
+    the license attribute.
+    '''
+    assert license(classifiers) == expected

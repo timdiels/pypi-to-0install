@@ -59,10 +59,14 @@ the version contains a prerelease segment (``.a|b|rc``), stability is
 
 ``{langs}`` is derived from ``Natural Language ::`` classifiers.
 
-``{license}`` is a Trove classifier. If ``License ::`` is in classifiers, it is
-used. If there are multiple, pick one in a deterministic fashion. If none, try
-to derive it from ``release_data['license']``.  If none or its value is not
-understood, try to derive it from a ``LICENSE.txt``. If no such file, omit
+.. Nice to have:
+   
+   If none, try to derive it from ``release_data['license']``.  If none or its
+   value is not understood, try to derive it from a ``LICENSE.txt``. If no such
+   file, omit the license attribute.
+
+``{license}`` is a Trove classifier. If License :: is in classifiers, it is
+used. If there are multiple, pick one in a deterministic fashion. Else, omit
 the license attribute.
 
 For ``<requires ...>...``, see `dependency conversion`_ below.

@@ -18,7 +18,7 @@
 from pypi_to_0install.various import zi, zi_namespaces
 from ._various import (
     InvalidDistribution, UnsupportedDistribution, InvalidDownload,
-    languages, stability, digest_of
+    languages, stability, digest_of, license
 )
 from ._dependencies import convert_dependencies
 from chicken_turtle_util import path as path_  # @UnresolvedImport
@@ -71,6 +71,10 @@ async def convert_sdist(context, zi_version, feed, old_feed, release_data, relea
             ),
         )
 
+        license_ = license(package.classifiers)
+        if license_:
+            implementation_attributes['license'] = license_
+
         source_implementation_attributes = implementation_attributes.copy()
         del source_implementation_attributes['id']
 
@@ -107,10 +111,6 @@ async def convert_sdist(context, zi_version, feed, old_feed, release_data, relea
             ),
             *requirements
         )
-
-        licenses = sorted(classifier for classifier in package.classifiers if classifier.startswith('License ::'))
-        if licenses:
-            implementation.set('license', licenses[0])
 
         # Add implementation to feed
         feed.getroot().append(implementation)

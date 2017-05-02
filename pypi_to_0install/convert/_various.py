@@ -68,6 +68,26 @@ def digest_of(directory):
     digest = alg.getID(digest).split('_', maxsplit=1)[1]
     return digest
 
+def license(classifiers):  # @ReservedAssignment
+    '''
+    Derive <implementation license=...> from classifiers
+
+    Parameters
+    ----------
+    classifiers : [str]
+        Trove classifiers of distribution
+
+    Returns
+    -------
+    str or None
+        'License ::' Trove classifier. Returns None if no license could be found.
+    '''
+    classifiers = sorted(classifier for classifier in classifiers if classifier.startswith('License ::'))
+    if classifiers:
+        return classifiers[0]
+    else:
+        return None
+
 languages = {
     'Natural Language :: Afrikaans': 'af',
     'Natural Language :: Arabic': 'ar',
