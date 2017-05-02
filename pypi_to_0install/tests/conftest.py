@@ -15,9 +15,10 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with PyPI to 0install.  If not, see <http://www.gnu.org/licenses/>.
 
-import pytest
 from packaging.version import Version, parse as py_parse_version
 from itertools import product
+import logging
+import pytest
 
 # http://stackoverflow.com/a/30091579/1031434
 from signal import signal, SIGPIPE, SIG_DFL
@@ -72,3 +73,8 @@ def versions():
         assert isinstance(py_parse_version(version), Version)
 
     return versions
+
+@pytest.fixture(autouse=True)
+def init_logging():
+    logging.getLogger().setLevel(logging.WARNING)
+    logging.getLogger('pypi_to_0install').setLevel(logging.DEBUG)
