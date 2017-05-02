@@ -37,6 +37,18 @@ class InvalidDownload(Exception):
     '''
 
 def stability(pypi_version):
+    '''
+    Derive <implementation stability=...> from PyPI version
+
+    Parameters
+    ----------
+    pypi_version : str
+
+    Returns
+    -------
+    str
+        Stability
+    '''
     version = parse_version(pypi_version)
     if version.modifiers and version.modifiers[-1].type_ == 'dev':
         return 'developer'
