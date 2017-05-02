@@ -33,7 +33,7 @@ from tempfile import NamedTemporaryFile
 from contextlib import contextmanager
 from textwrap import dedent, indent
 from pathlib import Path
-from lxml import etree
+from lxml import etree  # @UnresolvedImport
 import subprocess
 import asyncio
 import logging
