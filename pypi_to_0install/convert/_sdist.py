@@ -64,12 +64,15 @@ async def convert_sdist(context, zi_version, release_data, release_url):
             version=zi_version,
             released=release_url['upload_time'].strftime('%Y-%m-%d'),
             stability=stability(release_data['version']),
-            langs=' '.join(
-                languages[classifier]
-                for classifier in package.classifiers
-                if classifier in languages
-            ),
         )
+
+        langs = ' '.join(
+            languages[classifier]
+            for classifier in package.classifiers
+            if classifier in languages
+        )
+        if langs:
+            implementation_attributes['langs'] = langs
 
         license_ = license(package.classifiers)
         if license_:
