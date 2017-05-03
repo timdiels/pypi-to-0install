@@ -103,7 +103,7 @@ async def convert_sdist(context, zi_version, release_data, release_url):
             zi.command(
                 dict(name='compile'),
                 zi.runner(
-                    interface=context.script_uri('convert_sdist')
+                    interface='https://raw.githubusercontent.com/timdiels/pypi-to-0install/new/feeds/compile_sdist.xml'
                 ),
                 zi('{{{}}}implementation'.format(zi_namespaces['compile']),
                     source_implementation_attributes,

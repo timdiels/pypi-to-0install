@@ -1,0 +1,36 @@
+<?xml version="1.0" ?>
+<?xml-stylesheet type='text/xsl' href='interface.xsl'?>
+<interface min-injector-version="2.0" uri="https://raw.githubusercontent.com/timdiels/pypi-to-0install/new/feeds/compile_sdist.xml" xmlns="http://zero-install.sourceforge.net/2004/injector/interface">
+  <name>compile_sdist</name>
+  <summary>PyPI to 0install helper to help compile generated implementations to bin implementations</summary>
+  <implementation id="1" version="1.0.0-pre1">
+    <!--<file href="https://raw.githubusercontent.com/timdiels/pypi-to-0install/new/feeds/compile_sdist.py" size="todo" />
+    <command name="run" path="compile_sdist.py">
+      <runner interface='http://repo.roscidus.com/python/python' version='3.3..'/>
+    </command>
+    -->
+    <command name="run">
+      <runner interface="https://raw.githubusercontent.com/timdiels/pypi-to-0install/new/feeds/compile_sdist.py">
+        <arg>install</arg>
+        <arg>--install-option=--install-purelib=/lib</arg>
+        <arg>--install-option=--install-platlib=/lib</arg>
+        <arg>--install-option=--install-headers=/headers</arg>
+        <arg>--install-option=--install-scripts=/scripts</arg>
+        <arg>--install-option=--install-data=/data</arg>
+        <arg>--root</arg>
+        <arg>&quot;${DISTDIR}&quot;</arg>
+        <arg>--no-deps</arg>
+        <arg>&quot;${SRCDIR}&quot;</arg>
+      </runner>
+    </command>
+  </implementation>
+</interface>
+<!-- Base64 Signature
+iQEzBAABCAAdFiEEY0dn8mioqpXA44hkh7x0Uxr2li4FAlkJ+5kACgkQh7x0Uxr2li7GqAgAoLFi
+XJxt9j97f+SvXjIisI/rtPPqD2bPoxvF+QeD7IYCqGSWeHHvowkS9B6wkTJ5Zzvc8Fb0UJbYZtwS
+IRvoWGFfGs7i6dlVIShB06tl2fSIYJk/c2Q5un6pitGoIvMjKkUHYM5bndOPpdhbwnKR7sxZY7hT
+tKhLGZ94qxuapbKqzmMDV5sRKxTV2zpA7M5I+oUA3iL4tx40y61GYLyMJ5bObClmmSSqToPKpLTv
+v3PBMU6LjhLCDEFTT6IBU7d5FbCo1AKjHIzWIM0f7RGLv+R5g2F+P4hBznpfULhef4qVxS25VHee
+ugshbdYpjSlHEiW3aezcP6RkgwuDPxmdmw==
+
+-->

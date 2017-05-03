@@ -87,7 +87,7 @@ async def convert(context, package, old_feed):
             if release_url['url'] in package.blacklisted_distributions:
                 continue
             try:
-                _convert_distribution(context, feed, old_feed, release_data_, release_url, zi_version)
+                await _convert_distribution(context, feed, old_feed, release_data_, release_url, zi_version)
             except InvalidDownload as ex:
                 finished = False
                 context.logger.warning(
@@ -126,7 +126,7 @@ async def _convert_distribution(context, feed, old_feed, release_data, release_u
     package_type = release_url['packagetype']
     if package_type == 'sdist':
         context.logger.info('Converting {} distribution: {}'.format(package_type, release_url['filename']))
-        implementation = await convert_sdist(context, zi_version, feed, release_data, release_url)
+        implementation = await convert_sdist(context, zi_version, release_data, release_url)
     else:
         raise UnsupportedDistribution(
             'Unsupported package type: {!r} for release: {}'

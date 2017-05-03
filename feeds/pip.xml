@@ -1,0 +1,18 @@
+<?xml version="1.0" ?>
+<?xml-stylesheet type='text/xsl' href='interface.xsl'?>
+<interface min-injector-version="2.0" uri="https://raw.githubusercontent.com/timdiels/pypi-to-0install/new/feeds/pip.xml" xmlns="http://zero-install.sourceforge.net/2004/injector/interface">
+  <name>pip</name>
+  <summary>The PyPA recommended tool for installing Python packages.</summary>
+  <homepage>https://pypi.python.org/pypi/pip</homepage>
+  <package-implementation distributions="Arch" main="pip" package="python-pip"/>
+  <package-implementation distributions="Arch" main="pip2" package="python2-pip"/>
+</interface>
+<!-- Base64 Signature
+iQEzBAABCAAdFiEEY0dn8mioqpXA44hkh7x0Uxr2li4FAlkJ+7AACgkQh7x0Uxr2li4c6Af+LogK
+4h+qm0vYAbJB8KQMrsCHgLkQ4Y2b3JPpgop6/HIkaqh/8u3Jo3t4Jgg67+uWIi4eiKkcu7VvQjeF
+DmVjzdPFmdjhNpiks2XIPff9wUvfpadTwBsG5LkyaVW+xIdIp/olF5kQF517o7P2/ur3k4MkYdpT
+5a/BzLICEJA/jTFa3yv+OPQ3S1GX6d626OvAxs9zT3HDbSmKJ5/1jVnnxptnW5hiTx+X+qNrqNUc
+5e7sL6JJ6s7mAaqGoJkPzEIJ7IC66NViANV2ROHjnHSU/ldsuuog1N0S5uBOPaxdEo309tZ6fdFI
+UQ5No1WVkc9jWNB3/H+7xc10QAYzR9qhYA==
+
+-->

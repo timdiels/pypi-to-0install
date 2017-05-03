@@ -18,12 +18,14 @@
 from pypi_to_0install.pools import CombinedPool
 from packaging.version import Version, parse as py_parse_version
 from itertools import product
+from pkg_resources import resource_filename
 import logging
 import pytest
+import os
 
 # http://stackoverflow.com/a/30091579/1031434
-from signal import signal, SIGPIPE, SIG_DFL
-signal(SIGPIPE, SIG_DFL)  # Ignore SIGPIPE
+from signal import signal, SIGPIPE, SIG_IGN
+signal(SIGPIPE, SIG_IGN)  # Ignore SIGPIPE
 
 @pytest.fixture
 def versions():
@@ -86,3 +88,10 @@ def pool():
 def init_logging():
     logging.getLogger().setLevel(logging.WARNING)
     logging.getLogger('pypi_to_0install').setLevel(logging.DEBUG)
+
+@pytest.fixture(autouse=True, scope='session')
+def init_gpg():
+    '''
+    Make a private/pub key available during testing
+    '''
+    os.environ['GNUPGHOME'] = resource_filename(__name__, 'data/gpg_home')

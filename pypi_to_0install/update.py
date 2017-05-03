@@ -323,20 +323,6 @@ class FeedContext(object):
         '''
         return '{}/feeds/{}.xml'.format(self.base_uri, zi_name)
 
-    def script_uri(self, name):
-        '''
-        Get URI to PyPI to 0install script feed
-
-        Parameters
-        ----------
-        name : str
-
-        Returns
-        -------
-        str
-        '''
-        return '{}/pypi_to_0install/{}.xml'.format(self.base_uri, name)
-
 async def _feed_context(context, pool, package, errored, feed_file):
     '''
     Enter feed context of package
