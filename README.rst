@@ -1,3 +1,5 @@
+Archived as I won't finish this but it's a good starting point.
+
 Script that converts all PyPI packages to Zero Install feeds.
 
 Resulting feeds have a source implementation which calls ``pip install .``.
